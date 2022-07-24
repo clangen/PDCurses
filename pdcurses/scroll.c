@@ -1,6 +1,7 @@
 /* PDCurses */
 
 #include <curspriv.h>
+#include <assert.h>
 
 /*man-start**************************************************************
 
@@ -15,26 +16,26 @@ scroll
 
 ### Description
 
-   scroll() causes the window to scroll up one line.  This involves
+   scroll() causes the window to scroll up one line. This involves
    moving the lines in the window data strcture.
 
-   With a positive n, scrl() and wscrl() scroll the window up n
-   lines (line i + n becomes i); otherwise they scroll the window
-   down n lines.
+   With a positive n, scrl() and wscrl() scroll the window up n lines
+   (line i + n becomes i); otherwise they scroll the window down n
+   lines.
 
    For these functions to work, scrolling must be enabled via
-   scrollok(). Note also that scrolling is not allowed if the
-   supplied window is a pad.
+   scrollok(). Note also that scrolling is not allowed if the supplied
+   window is a pad.
 
 ### Return Value
 
    All functions return OK on success and ERR on error.
 
 ### Portability
-                             X/Open    BSD    SYS V
+                             X/Open  ncurses  NetBSD
     scroll                      Y       Y       Y
-    scrl                        Y       -      4.0
-    wscrl                       Y       -      4.0
+    scrl                        Y       Y       Y
+    wscrl                       Y       Y       Y
 
 **man-end****************************************************************/
 
@@ -45,6 +46,7 @@ int wscrl(WINDOW *win, int n)
 
     /* Check if window scrolls. Valid for window AND pad */
 
+    assert( win);
     if (!win || !win->_scroll || !n)
         return ERR;
 

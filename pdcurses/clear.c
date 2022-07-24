@@ -1,6 +1,7 @@
 /* PDCurses */
 
 #include <curspriv.h>
+#include <assert.h>
 
 /*man-start**************************************************************
 
@@ -23,22 +24,22 @@ clear
    erase() and werase() copy blanks (i.e. the background chtype) to
    every cell of the window.
 
-   clear() and wclear() are similar to erase() and werase(), but
-   they also call clearok() to ensure that the the window is
-   cleared on the next wrefresh().
+   clear() and wclear() are similar to erase() and werase(), but they
+   also call clearok() to ensure that the the window is cleared on the
+   next wrefresh().
 
-   clrtobot() and wclrtobot() clear the window from the current
-   cursor position to the end of the window.
+   clrtobot() and wclrtobot() clear the window from the current cursor
+   position to the end of the window.
 
-   clrtoeol() and wclrtoeol() clear the window from the current
-   cursor position to the end of the current line.
+   clrtoeol() and wclrtoeol() clear the window from the current cursor
+   position to the end of the current line.
 
 ### Return Value
 
    All functions return OK on success and ERR on error.
 
 ### Portability
-                             X/Open    BSD    SYS V
+                             X/Open  ncurses  NetBSD
     clear                       Y       Y       Y
     wclear                      Y       Y       Y
     erase                       Y       Y       Y
@@ -58,6 +59,7 @@ int wclrtoeol(WINDOW *win)
     PDC_LOG(("wclrtoeol() - called: Row: %d Col: %d\n",
              win->_cury, win->_curx));
 
+    assert( win);
     if (!win)
         return ERR;
 
@@ -71,10 +73,7 @@ int wclrtoeol(WINDOW *win)
     for (minx = x, ptr = &win->_y[y][x]; minx < win->_maxx; minx++, ptr++)
         *ptr = blank;
 
-    if (x < win->_firstch[y] || win->_firstch[y] == _NO_CHANGE)
-        win->_firstch[y] = x;
-
-    win->_lastch[y] = win->_maxx - 1;
+    PDC_mark_cells_as_changed( win, y, x, win->_maxx - 1);
 
     PDC_sync(win);
     return OK;
@@ -93,6 +92,7 @@ int wclrtobot(WINDOW *win)
 
     PDC_LOG(("wclrtobot() - called\n"));
 
+    assert( win);
     if (!win)
         return ERR;
 
@@ -144,6 +144,7 @@ int wclear(WINDOW *win)
 {
     PDC_LOG(("wclear() - called\n"));
 
+    assert( win);
     if (!win)
         return ERR;
 

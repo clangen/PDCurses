@@ -1,6 +1,7 @@
 /* PDCurses */
 
 #include <curspriv.h>
+#include <assert.h>
 
 /*man-start**************************************************************
 
@@ -20,50 +21,53 @@ outopts
 
     int raw_output(bool bf);
 
+    bool is_leaveok(const WINDOW *win);
+
 ### Description
 
-   With clearok(), if bf is TRUE, the next call to wrefresh() with
-   this window will clear the screen completely and redraw the
-   entire screen.
+   With clearok(), if bf is TRUE, the next call to wrefresh() with this
+   window will clear the screen completely and redraw the entire screen.
 
-   immedok(), called with a second argument of TRUE, causes an
-   automatic wrefresh() every time a change is made to the
-   specified window.
+   immedok(), called with a second argument of TRUE, causes an automatic
+   wrefresh() every time a change is made to the specified window.
 
-   Normally, the hardware cursor is left at the location of the
-   window being refreshed.  leaveok() allows the cursor to be
-   left wherever the update happens to leave it.  It's useful
-   for applications where the cursor is not used, since it reduces
-   the need for cursor motions.  If possible, the cursor is made
-   invisible when this option is enabled.
+   Normally, the hardware cursor is left at the location of the window
+   being refreshed. leaveok() allows the cursor to be left wherever the
+   update happens to leave it. It's useful for applications where the
+   cursor is not used, since it reduces the need for cursor motions. If
+   possible, the cursor is made invisible when this option is enabled.
 
-   wsetscrreg() sets a scrolling region in a window; "top" and
-   "bot" are the line numbers for the top and bottom margins. If
-   this option and scrollok() are enabled, any attempt to move off
-   the bottom margin will cause all lines in the scrolling region
-   to scroll up one line. setscrreg() is the stdscr version.
+   wsetscrreg() sets a scrolling region in a window; "top" and "bot" are
+   the line numbers for the top and bottom margins. If this option and
+   scrollok() are enabled, any attempt to move off the bottom margin
+   will cause all lines in the scrolling region to scroll up one line.
+   setscrreg() is the stdscr version.
 
    idlok() and idcok() do nothing in PDCurses, but are provided for
    compatibility with other curses implementations.
 
-   raw_output() enables the output of raw characters using the
-   standard *add* and *ins* curses functions (that is, it disables
-   translation of control characters).
+   raw_output() enables the output of raw characters using the standard
+   *add* and *ins* curses functions (that is, it disables translation of
+   control characters).
+
+   is_leaveok() reports whether the specified window is in leaveok mode.
 
 ### Return Value
 
-   All functions return OK on success and ERR on error.
+   All functions except is_leaveok() return OK on success and ERR on
+   error.
 
 ### Portability
-                             X/Open    BSD    SYS V
+                             X/Open  ncurses  NetBSD
     clearok                     Y       Y       Y
     idlok                       Y       Y       Y
-    idcok                       Y       -      4.0
-    immedok                     Y       -      4.0
+    idcok                       Y       Y       Y
+    immedok                     Y       Y       Y
     leaveok                     Y       Y       Y
     setscrreg                   Y       Y       Y
     wsetscrreg                  Y       Y       Y
     scrollok                    Y       Y       Y
+    is_leaveok                  -       Y       Y
     raw_output                  -       -       -
 
 **man-end****************************************************************/
@@ -72,6 +76,7 @@ int clearok(WINDOW *win, bool bf)
 {
     PDC_LOG(("clearok() - called\n"));
 
+    assert( win);
     if (!win)
         return ERR;
 
@@ -82,6 +87,8 @@ int clearok(WINDOW *win, bool bf)
 
 int idlok(WINDOW *win, bool bf)
 {
+    INTENTIONALLY_UNUSED_PARAMETER( win);
+    INTENTIONALLY_UNUSED_PARAMETER( bf);
     PDC_LOG(("idlok() - called\n"));
 
     return OK;
@@ -89,6 +96,8 @@ int idlok(WINDOW *win, bool bf)
 
 void idcok(WINDOW *win, bool bf)
 {
+    INTENTIONALLY_UNUSED_PARAMETER( win);
+    INTENTIONALLY_UNUSED_PARAMETER( bf);
     PDC_LOG(("idcok() - called\n"));
 }
 
@@ -104,6 +113,7 @@ int leaveok(WINDOW *win, bool bf)
 {
     PDC_LOG(("leaveok() - called\n"));
 
+    assert( win);
     if (!win)
         return ERR;
 
@@ -125,6 +135,7 @@ int wsetscrreg(WINDOW *win, int top, int bottom)
 {
     PDC_LOG(("wsetscrreg() - called: top %d bottom %d\n", top, bottom));
 
+    assert( win);
     if (win && 0 <= top && top <= win->_cury &&
         win->_cury <= bottom && bottom < win->_maxy)
     {
@@ -141,6 +152,7 @@ int scrollok(WINDOW *win, bool bf)
 {
     PDC_LOG(("scrollok() - called\n"));
 
+    assert( win);
     if (!win)
         return ERR;
 
@@ -153,7 +165,22 @@ int raw_output(bool bf)
 {
     PDC_LOG(("raw_output() - called\n"));
 
+    assert( SP);
+    if (!SP)
+        return ERR;
+
     SP->raw_out = bf;
 
     return OK;
+}
+
+bool is_leaveok(const WINDOW *win)
+{
+    PDC_LOG(("is_leaveok() - called\n"));
+
+    assert( win);
+    if (!win)
+        return FALSE;
+
+    return win->_leaveit;
 }

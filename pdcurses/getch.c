@@ -1,6 +1,7 @@
 /* PDCurses */
 
 #include <curspriv.h>
+#include <assert.h>
 
 /*man-start**************************************************************
 
@@ -23,7 +24,6 @@ getch
     int unget_wch(const wchar_t wch);
 
     unsigned long PDC_get_key_modifiers(void);
-    int PDC_save_key_modifiers(bool flag);
     int PDC_return_key_modifiers(bool flag);
 
 ### Description
@@ -40,7 +40,7 @@ getch
    If keypad() is TRUE, and a function key is pressed, the token for
    that function key will be returned instead of the raw characters.
    Possible function keys are defined in <curses.h> with integers
-   beginning with 0401, whose names begin with KEY_.
+   starting at KEY_OFFSET, whose names begin with KEY_.
 
    If nodelay(win, TRUE) has been called on the window and no input is
    waiting, the value ERR is returned.
@@ -55,15 +55,15 @@ getch
    PDCurses is built with the PDC_WIDE option. It takes a pointer to a
    wint_t rather than returning the key as an int, and instead returns
    KEY_CODE_YES if the key is a function key. Otherwise, it returns OK
-   or ERR. It's important to check for KEY_CODE_YES, since regular wide
-   characters can have the same values as function key codes.
+   or ERR. It's important to check for KEY_CODE_YES; on most Curses
+   implementations (not PDCursesMod),  regular wide characters can have
+   the same values as function key codes.
 
    unget_wch() puts a wide character on the input queue.
 
    PDC_get_key_modifiers() returns the keyboard modifiers (shift,
    control, alt, numlock) effective at the time of the last getch()
-   call, if PDC_save_key_modifiers(TRUE) has been called before the
-   getch(). Use the macros PDC_KEY_MODIFIER_* to determine which
+   call. Use the macros PDC_KEY_MODIFIER_* to determine which
    modifier(s) were set. PDC_return_key_modifiers() tells getch() to
    return modifier keys pressed alone as keystrokes (KEY_ALT_L, etc.).
    These may not work on all platforms.
@@ -93,27 +93,266 @@ getch
 
 **man-end****************************************************************/
 
-#define _INBUFSIZ   512 /* size of terminal input buffer */
-#define NUNGETCH    256 /* max # chars to ungetch() */
+#include <stdlib.h>
 
-static int c_pindex = 0;    /* putter index */
-static int c_gindex = 1;    /* getter index */
-static int c_ungind = 0;    /* ungetch() push index */
-static int c_ungch[NUNGETCH];   /* array of ungotten chars */
+       /* By default,  the PDC_function_key[] array contains 0       */
+       /* (i.e., there's no key that's supposed to be returned for   */
+       /* exit handling), and 22 = Ctrl-V (i.e.,  hit Ctrl-V to      */
+       /* paste text from the clipboard into the key queue);  then   */
+       /* no key by default to enlarge/decrease font size or to      */
+       /* select a font from the font dialog;  then Ctrl-C for copy. */
+
+static int PDC_function_key[PDC_MAX_FUNCTION_KEYS] = { 0, 22, 0, 0, 0, 0, 3 };
+
+/*man-start**************************************************************
+
+Function keys
+-------------
+
+### Synopsis
+
+   int PDC_set_function_key( const unsigned function, const int new_key);
+   int PDC_get_function_key( const unsigned function);
+
+### Description
+
+   Allows one to set a 'shut down' key,  and reassign hotkeys used for
+   copying to/pasting from the clipboard and enlarging and decreasing the
+   font size,  and for using the font selection dialog (on platforms where
+   these things are possible and implemented).  For example, calling
+
+   PDC_set_function_key( FUNCTION_KEY_SHUT_DOWN, ALT_Q);
+
+   would reset PDCursesMod such that,  if the user clicks on the 'close'
+   box, Alt-Q would be added to the key queue.  This would give the app the
+   opportunity to shut things down gracefully,  perhaps asking "are you
+   sure",  and/or "save changes or discard or cancel",  rather than just
+   having the window close (the default behavior).
+
+   Similarly,  one can set FUNCTION_KEY_ABORT to a key which,  when pressed,
+   will cause the program to abort gracelessly (no key returned to the
+   application).  One would normally use this to enable/disable Ctrl-C or
+   Ctrl-Break,  or to set a different 'abort' key so that Ctrl-C can be
+   used for copying.
+
+### Return Value
+
+   Returns key code previously set for that function,  or -1 if the
+   function does not actually exist.
+
+### Portability
+
+   PDCursesMod-only function.
+
+**man-end****************************************************************/
+int PDC_set_function_key( const unsigned function, const int new_key)
+{
+    int old_key = -1;
+
+    assert( function < PDC_MAX_FUNCTION_KEYS);
+    if( function < PDC_MAX_FUNCTION_KEYS)
+    {
+         old_key = PDC_function_key[function];
+         PDC_function_key[function] = new_key;
+    }
+    return( old_key);
+}
+
+int PDC_get_function_key( const unsigned function)
+{
+    assert( function < PDC_MAX_FUNCTION_KEYS);
+    return( PDC_function_key[function]);
+}
+
+static int _get_box(int *y_start, int *y_end, int *x_start, int *x_end)
+{
+    int start, end;
+
+    if (SP->sel_start < SP->sel_end)
+    {
+        start = SP->sel_start;
+        end = SP->sel_end;
+    }
+    else
+    {
+        start = SP->sel_end;
+        end = SP->sel_start;
+    }
+
+    *y_start = start / COLS;
+    *x_start = start % COLS;
+
+    *y_end = end / COLS;
+    *x_end = end % COLS;
+
+    return (end - start) + (*y_end - *y_start);
+}
+
+static bool _highlight(void)
+{
+    int i, j, y_start, y_end, x_start, x_end;
+
+    if (-1 == SP->sel_start || SP->sel_start == SP->sel_end)
+        return( FALSE);
+
+    _get_box(&y_start, &y_end, &x_start, &x_end);
+
+    for (j = y_start; j <= y_end; j++)
+        for (i = (j == y_start ? x_start : 0);
+             i < (j == y_end ? x_end : COLS); i++)
+            curscr->_y[j][i] ^= A_REVERSE;
+    return( TRUE);
+}
+
+static void _copy(void)
+{
+#ifdef PDC_WIDE
+    wchar_t *wtmp;
+# define TMP wtmp
+# define MASK A_CHARTEXT
+#else
+# define TMP tmp
+# define MASK 0xff
+#endif
+    char *tmp;
+    long pos;
+    int i, j, y_start, y_end, x_start, x_end, len;
+
+    if (-1 == SP->sel_start)
+        return;
+
+    len = _get_box(&y_start, &y_end, &x_start, &x_end);
+
+    if (!len)
+        return;
+
+#ifdef PDC_WIDE
+    wtmp = malloc((len + 1) * sizeof(wchar_t));
+    len *= 3;
+#endif
+    tmp = malloc(len + 1);
+
+    for (j = y_start, pos = 0; j <= y_end; j++)
+    {
+        for (i = (j == y_start ? x_start : 0);
+             i < (j == y_end ? x_end : COLS); i++)
+#ifdef PDC_WIDE
+            wtmp[pos++] = (wchar_t)( curscr->_y[j][i] & MASK);
+#else
+            tmp[pos++] = (char)( curscr->_y[j][i] & MASK);
+#endif
+
+        while (y_start != y_end && pos > 0 && TMP[pos - 1] == 32)
+            pos--;
+
+        if (j < y_end)
+            TMP[pos++] = 10;
+    }
+    TMP[pos] = 0;
+
+#ifdef PDC_WIDE
+    pos = (long)PDC_wcstombs(tmp, wtmp, len);
+#endif
+
+    PDC_setclipboard(tmp, pos);
+    free(tmp);
+#ifdef PDC_WIDE
+    free(wtmp);
+#endif
+}
+
+static int _paste(void)
+{
+#ifdef PDC_WIDE
+    wchar_t *wpaste;
+# define PASTE wpaste
+#else
+# define PASTE paste
+#endif
+    char *paste;
+    long len, newmax;
+    int key;
+
+    key = PDC_getclipboard(&paste, &len);
+    if (PDC_CLIP_SUCCESS != key || !len)
+        return -1;
+
+#ifdef PDC_WIDE
+    wpaste = malloc(len * sizeof(wchar_t));
+    len = (long)PDC_mbstowcs(wpaste, paste, len);
+#endif
+    newmax = len + SP->c_ungind;
+    if (newmax > SP->c_ungmax)
+    {
+        SP->c_ungch = realloc(SP->c_ungch, newmax * sizeof(int));
+        if (!SP->c_ungch)
+            return -1;
+        SP->c_ungmax = newmax;
+    }
+    while (len > 1)
+        PDC_ungetch(PASTE[--len]);
+    key = *PASTE;
+#ifdef PDC_WIDE
+    free(wpaste);
+#endif
+    PDC_freeclipboard(paste);
+    SP->key_modifiers = 0;
+
+    return key;
+}
+
+#define WHEEL_EVENTS (PDC_MOUSE_WHEEL_UP|PDC_MOUSE_WHEEL_DOWN|PDC_MOUSE_WHEEL_RIGHT | PDC_MOUSE_WHEEL_LEFT)
 
 static int _mouse_key(void)
 {
     int i, key = KEY_MOUSE;
-    unsigned long mbe = SP->_trap_mbe;
+    const int changes = SP->mouse_status.changes;
+    const mmask_t mbe = SP->_trap_mbe;
+    bool can_select = !(mbe & (BUTTON1_MOVED | BUTTON1_PRESSED | BUTTON1_RELEASED));
+    bool can_paste = !(mbe & BUTTON2_CLICKED);
+            /* really means 'can do these things without shift' */
+
+    /* Selection highlighting? */
+
+    if ((can_select || SP->mouse_status.button[0] & BUTTON_SHIFT) && changes & 1)
+    {
+        i = SP->mouse_status.y * COLS + SP->mouse_status.x;
+        switch (SP->mouse_status.button[0] & BUTTON_ACTION_MASK)
+        {
+        case BUTTON_PRESSED:
+            if( _highlight())
+                wrefresh(curscr);
+            SP->sel_start = SP->sel_end = i;
+            return -1;
+        case BUTTON_MOVED:
+            {
+            const bool refresh_needed = _highlight();
+
+            SP->sel_end = i;
+            if( _highlight() || refresh_needed)
+                wrefresh(curscr);
+            return -1;
+            }
+        case BUTTON_RELEASED:
+            _copy();
+            return -1;
+        }
+    }
+    else if ((can_paste || SP->mouse_status.button[1] & BUTTON_SHIFT) &&
+             changes & 2 && (SP->mouse_status.button[1] &
+             BUTTON_ACTION_MASK) == BUTTON_CLICKED)
+    {
+        return _paste();
+    }
 
     /* Filter unwanted mouse events */
 
     for (i = 0; i < 3; i++)
     {
-        if (pdc_mouse_status.changes & (1 << i))
+        if (changes & (1 << i))
         {
-            int shf = i * 5;
-            short button = pdc_mouse_status.button[i] & BUTTON_ACTION_MASK;
+            int shf = i * PDC_BITS_PER_BUTTON;
+            short button = SP->mouse_status.button[i] & BUTTON_ACTION_MASK;
 
             if (   (!(mbe & (BUTTON1_PRESSED << shf)) &&
                     (button == BUTTON_PRESSED))
@@ -124,7 +363,6 @@ static int _mouse_key(void)
                 || (!(mbe & (BUTTON1_DOUBLE_CLICKED << shf)) &&
                     (button == BUTTON_DOUBLE_CLICKED))
 
-                        /* added triple clicks 2011 jun 4: BJG */
                 || (!(mbe & (BUTTON1_TRIPLE_CLICKED << shf)) &&
                     (button == BUTTON_TRIPLE_CLICKED))
 
@@ -134,34 +372,32 @@ static int _mouse_key(void)
                 || (!(mbe & (BUTTON1_RELEASED << shf)) &&
                     (button == BUTTON_RELEASED))
             )
-                pdc_mouse_status.changes ^= (1 << i);
+                SP->mouse_status.changes ^= (1 << i);
         }
     }
 
-    if (pdc_mouse_status.changes & PDC_MOUSE_MOVED)
+    if (changes & PDC_MOUSE_MOVED)
     {
         if (!(mbe & (BUTTON1_MOVED|BUTTON2_MOVED|BUTTON3_MOVED | REPORT_MOUSE_POSITION)))
-            pdc_mouse_status.changes ^= PDC_MOUSE_MOVED;
+            SP->mouse_status.changes ^= PDC_MOUSE_MOVED;
     }
 
-    if (pdc_mouse_status.changes &
-        (PDC_MOUSE_WHEEL_UP|PDC_MOUSE_WHEEL_DOWN))
+    if (changes & WHEEL_EVENTS)
     {
         if (!(mbe & MOUSE_WHEEL_SCROLL))
-            pdc_mouse_status.changes &=
-                ~(PDC_MOUSE_WHEEL_UP|PDC_MOUSE_WHEEL_DOWN);
+            SP->mouse_status.changes &= ~WHEEL_EVENTS;
     }
 
-    if (!pdc_mouse_status.changes)
+    if (!SP->mouse_status.changes)
         return -1;
 
     /* Check for click in slk area */
 
-    i = PDC_mouse_in_slk(pdc_mouse_status.y, pdc_mouse_status.x);
+    i = PDC_mouse_in_slk(SP->mouse_status.y, SP->mouse_status.x);
 
     if (i)
     {
-        if (pdc_mouse_status.button[0] & (BUTTON_PRESSED|BUTTON_CLICKED))
+        if (SP->mouse_status.button[0] & (BUTTON_PRESSED|BUTTON_CLICKED))
             key = KEY_F(i);
         else
             key = -1;
@@ -170,16 +406,22 @@ static int _mouse_key(void)
     return key;
 }
 
+bool PDC_is_function_key( const int key)
+{
+   return( key >= KEY_MIN && key < KEY_MAX);
+}
+
 #define WAIT_FOREVER    -1
 
 int wgetch(WINDOW *win)
 {
-    static int buffer[_INBUFSIZ];   /* character buffer */
-    int key, remaining_millisecs;
+    int key = ERR, remaining_millisecs;
 
     PDC_LOG(("wgetch() - called\n"));
 
-    if (!win)
+    assert( SP);
+    assert( win);
+    if (!win || !SP)
         return ERR;
 
     if (SP->delaytenths)
@@ -199,27 +441,32 @@ int wgetch(WINDOW *win)
 
     /* if ungotten char exists, remove and return it */
 
-    if (c_ungind)
-        return c_ungch[--c_ungind];
+    if (SP->c_ungind)
+        key = SP->c_ungch[--(SP->c_ungind)];
 
     /* if normal and data in buffer */
 
-    if ((!SP->raw_inp && !SP->cbreak) && (c_gindex < c_pindex))
-        return buffer[c_gindex++];
+    else if ((!SP->raw_inp && !SP->cbreak) && (SP->c_gindex < SP->c_pindex))
+        key = SP->c_buffer[SP->c_gindex++];
 
+    if( key != ERR)
+    {
+        if( key == KEY_RESIZE)
+            resize_term( 0, 0);
+        return( key);
+    }
     /* prepare to buffer data */
 
-    c_pindex = 0;
-    c_gindex = 0;
+    SP->c_pindex = 0;
+    SP->c_gindex = 0;
 
     /* to get here, no keys are buffered. go and get one. */
 
     for (;;)            /* loop for any buffering */
     {
-
         /* is there a keystroke ready? */
 
-        if (!PDC_check_key())
+        while( !PDC_check_key())
         {
             /* if not, handle timeout() and halfdelay() */
             int nap_time = 50;
@@ -233,31 +480,46 @@ int wgetch(WINDOW *win)
                 remaining_millisecs -= nap_time;
             }
             napms( nap_time);
-            continue;   /* then check again */
         }
 
         /* if there is, fetch it */
 
         key = PDC_get_key();
 
-        if (SP->key_code)
+        /* copy or paste? */
+
+#ifndef _WIN32
+        if (SP->key_modifiers & PDC_KEY_MODIFIER_SHIFT)
+#endif
         {
-            /* filter special keys if not in keypad mode */
-
-            if (!win->_use_keypad)
-                key = -1;
-
-            /* filter mouse events; translate mouse clicks in the slk
-               area to function keys */
-
-            else if (key == KEY_MOUSE)
-                key = _mouse_key();
+            if (PDC_function_key[FUNCTION_KEY_COPY] == key)
+            {
+                _copy();
+                continue;
+            }
+            else if (PDC_function_key[FUNCTION_KEY_PASTE] == key)
+                key = _paste();
         }
+
+        /* filter mouse events; translate mouse clicks in the slk
+           area to function keys */
+
+        if( key == KEY_MOUSE)
+            key = _mouse_key();
+
+        /* filter special keys if not in keypad mode */
+
+        if( key != KEY_RESIZE && PDC_is_function_key( key) && !win->_use_keypad)
+            key = -1;
 
         /* unwanted key? loop back */
 
         if (key == -1)
             continue;
+
+        if( _highlight())
+            wrefresh(curscr);
+        SP->sel_start = SP->sel_end = -1;
 
         /* translate CR */
 
@@ -266,7 +528,7 @@ int wgetch(WINDOW *win)
 
         /* if echo is enabled */
 
-        if (SP->echo && !SP->key_code)
+        if (SP->echo && !PDC_is_function_key( key))
         {
             waddch(win, key);
             wrefresh(win);
@@ -275,23 +537,31 @@ int wgetch(WINDOW *win)
         /* if no buffering */
 
         if (SP->raw_inp || SP->cbreak)
+        {
+            if( key == KEY_RESIZE)
+                resize_term( 0, 0);
             return key;
+        }
 
         /* if no overflow, put data in buffer */
 
         if (key == '\b')
         {
-            if (c_pindex > c_gindex)
-                c_pindex--;
+            if (SP->c_pindex > SP->c_gindex)
+                SP->c_pindex--;
         }
         else
-            if (c_pindex < _INBUFSIZ - 2)
-                buffer[c_pindex++] = key;
+            if (SP->c_pindex < _INBUFSIZ - 2)
+                SP->c_buffer[SP->c_pindex++] = key;
 
         /* if we got a line */
 
         if (key == '\n' || key == '\r')
-            return buffer[c_gindex++];
+        {
+            if( SP->c_buffer[SP->c_gindex] == KEY_RESIZE)
+                resize_term( 0, 0);
+            return SP->c_buffer[SP->c_gindex++];
+        }
     }
 }
 
@@ -319,10 +589,10 @@ int PDC_ungetch(int ch)
 {
     PDC_LOG(("ungetch() - called\n"));
 
-    if (c_ungind >= NUNGETCH)   /* pushback stack full */
+    if (SP->c_ungind >= SP->c_ungmax)   /* pushback stack full */
         return ERR;
 
-    c_ungch[c_ungind++] = ch;
+    SP->c_ungch[SP->c_ungind++] = ch;
 
     return OK;
 }
@@ -331,11 +601,15 @@ int flushinp(void)
 {
     PDC_LOG(("flushinp() - called\n"));
 
+    assert( SP);
+    if (!SP)
+        return ERR;
+
     PDC_flushinp();
 
-    c_gindex = 1;           /* set indices to kill buffer */
-    c_pindex = 0;
-    c_ungind = 0;           /* clear c_ungch array */
+    SP->c_gindex = 1;       /* set indices to kill buffer */
+    SP->c_pindex = 0;
+    SP->c_ungind = 0;       /* clear SP->c_ungch array */
 
     return OK;
 }
@@ -344,20 +618,20 @@ unsigned long PDC_get_key_modifiers(void)
 {
     PDC_LOG(("PDC_get_key_modifiers() - called\n"));
 
-    return pdc_key_modifiers;
-}
+    assert( SP);
+    if (!SP)
+        return (unsigned long)ERR;
 
-int PDC_save_key_modifiers(bool flag)
-{
-    PDC_LOG(("PDC_save_key_modifiers() - called\n"));
-
-    SP->save_key_modifiers = flag;
-    return OK;
+    return SP->key_modifiers;
 }
 
 int PDC_return_key_modifiers(bool flag)
 {
     PDC_LOG(("PDC_return_key_modifiers() - called\n"));
+
+    assert( SP);
+    if (!SP)
+        return ERR;
 
     SP->return_key_modifiers = flag;
     return PDC_modifiers_set();
@@ -370,6 +644,7 @@ int wget_wch(WINDOW *win, wint_t *wch)
 
     PDC_LOG(("wget_wch() - called\n"));
 
+    assert( wch);
     if (!wch)
         return ERR;
 
@@ -378,9 +653,9 @@ int wget_wch(WINDOW *win, wint_t *wch)
     if (key == ERR)
         return ERR;
 
-    *wch = key;
+    *wch = (wint_t)key;
 
-    return SP->key_code ? KEY_CODE_YES : OK;
+    return PDC_is_function_key( key) ? KEY_CODE_YES : OK;
 }
 
 int get_wch(wint_t *wch)

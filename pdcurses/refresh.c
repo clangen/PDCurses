@@ -1,6 +1,7 @@
 /* PDCurses */
 
 #include <curspriv.h>
+#include <assert.h>
 
 /*man-start**************************************************************
 
@@ -18,46 +19,58 @@ refresh
 
 ### Description
 
-   wrefresh() copies the named window to the physical terminal
-   screen, taking into account what is already there in order to
-   optimize cursor movement. refresh() does the same, using stdscr.
-   These routines must be called to get any output on the terminal,
-   as other routines only manipulate data structures. Unless
-   leaveok() has been enabled, the physical cursor of the terminal
-   is left at the location of the window's cursor.
+   wrefresh() copies the named window to the physical terminal screen,
+   taking into account what is already there in order to optimize cursor
+   movement. refresh() does the same, using stdscr. These routines must
+   be called to get any output on the terminal, as other routines only
+   manipulate data structures. Unless leaveok() has been enabled, the
+   physical cursor of the terminal is left at the location of the
+   window's cursor.
 
    wnoutrefresh() and doupdate() allow multiple updates with more
-   efficiency than wrefresh() alone. wrefresh() works by first
-   calling wnoutrefresh(), which copies the named window to the
-   virtual screen.  It then calls doupdate(), which compares the
-   virtual screen to the physical screen and does the actual
-   update. A series of calls to wrefresh() will result in
-   alternating calls to wnoutrefresh() and doupdate(), causing
-   several bursts of output to the screen.  By first calling
-   wnoutrefresh() for each window, it is then possible to call
+   efficiency than wrefresh() alone. wrefresh() works by first calling
+   wnoutrefresh(), which copies the named window to the virtual screen.
+   It then calls doupdate(), which compares the virtual screen to the
+   physical screen and does the actual update. A series of calls to
+   wrefresh() will result in alternating calls to wnoutrefresh() and
+   doupdate(), causing several bursts of output to the screen. By first
+   calling wnoutrefresh() for each window, it is then possible to call
    doupdate() only once.
 
-   In PDCurses, redrawwin() is equivalent to touchwin(), and
-   wredrawln() is the same as touchline(). In some other curses
-   implementations, there's a subtle distinction, but it has no
-   meaning in PDCurses.
+   In PDCurses, redrawwin() is equivalent to touchwin(), and wredrawln()
+   is the same as touchline(). In some other curses implementations,
+   there's a subtle distinction, but it has no meaning in PDCurses.
 
 ### Return Value
 
    All functions return OK on success and ERR on error.
 
 ### Portability
-                             X/Open    BSD    SYS V
+                             X/Open  ncurses  NetBSD
     refresh                     Y       Y       Y
     wrefresh                    Y       Y       Y
     wnoutrefresh                Y       Y       Y
     doupdate                    Y       Y       Y
-    redrawwin                   Y       -      4.0
-    wredrawln                   Y       -      4.0
+    redrawwin                   Y       Y       Y
+    wredrawln                   Y       Y       Y
 
 **man-end****************************************************************/
 
 #include <string.h>
+
+static void _normalize_cursor( WINDOW *win)
+{
+    if( win->_cury < 0)
+        win->_cury = 0;
+    if( win->_cury >= win->_maxy)
+        win->_cury = win->_maxy - 1;
+    if( win->_curx < 0)
+        win->_curx = 0;
+    if( win->_curx >= win->_maxx)
+        win->_curx = win->_maxx - 1;
+}
+
+int PDC_pnoutrefresh_with_stored_params( WINDOW *pad);       /* pad.c */
 
 int wnoutrefresh(WINDOW *win)
 {
@@ -66,21 +79,29 @@ int wnoutrefresh(WINDOW *win)
 
     PDC_LOG(("wnoutrefresh() - called: win=%p\n", win));
 
-    if ( !win || (win->_flags & (_PAD|_SUBPAD)) )
+    assert( win);
+    if ( !win)
         return ERR;
+    if( is_pad( win))
+        return PDC_pnoutrefresh_with_stored_params( win);
 
     begy = win->_begy;
     begx = win->_begx;
 
-    for (i = 0, j = begy; i < win->_maxy; i++, j++)
+    for (i = 0, j = begy; i < win->_maxy && j < curscr->_maxy; i++, j++)
     {
-        if (win->_firstch[i] != _NO_CHANGE)
+        if (win->_firstch[i] != _NO_CHANGE && j >= 0)
         {
             chtype *src = win->_y[i];
             chtype *dest = curscr->_y[j] + begx;
 
             int first = win->_firstch[i]; /* first changed */
             int last = win->_lastch[i];   /* last changed */
+
+            if( last > curscr->_maxx - begx - 1)    /* don't run off right-hand */
+                last = curscr->_maxx - begx - 1;    /* edge of screen */
+            if( first < -begx)       /* ...nor the left edge */
+                first = -begx;
 
             /* ignore areas on the outside that are marked as changed,
                but really aren't */
@@ -108,11 +129,8 @@ int wnoutrefresh(WINDOW *win)
                 if (last > curscr->_lastch[j])
                     curscr->_lastch[j] = last;
             }
-
-            win->_firstch[i] = _NO_CHANGE;  /* updated now */
         }
-
-        win->_lastch[i] = _NO_CHANGE;       /* updated now */
+        PDC_set_changed_cells_range( win, i, _NO_CHANGE, _NO_CHANGE);
     }
 
     if (win->_clear)
@@ -122,6 +140,7 @@ int wnoutrefresh(WINDOW *win)
     {
         curscr->_cury = win->_cury + begy;
         curscr->_curx = win->_curx + begx;
+        _normalize_cursor( curscr);
     }
 
     return OK;
@@ -134,7 +153,9 @@ int doupdate(void)
 
     PDC_LOG(("doupdate() - called\n"));
 
-    if (!curscr)
+    assert( SP);
+    assert( curscr);
+    if (!SP || !curscr)
         return ERR;
 
     if (isendwin())         /* coming back after endwin() called */
@@ -157,7 +178,7 @@ int doupdate(void)
             int first, last;
 
             chtype *src = curscr->_y[y];
-            chtype *dest = pdc_lastscr->_y[y];
+            chtype *dest = SP->lastscr->_y[y];
 
             if (clearall)
             {
@@ -189,7 +210,7 @@ int doupdate(void)
                           )
                         len++;
 
-                /* update the screen, and pdc_lastscr */
+                /* update the screen, and SP->lastscr */
 
                 if (len)
                 {
@@ -204,8 +225,7 @@ int doupdate(void)
                     first++;
             }
 
-            curscr->_firstch[y] = _NO_CHANGE;
-            curscr->_lastch[y] = _NO_CHANGE;
+            PDC_set_changed_cells_range( curscr, y, _NO_CHANGE, _NO_CHANGE);
         }
     }
 
@@ -217,6 +237,8 @@ int doupdate(void)
     SP->cursrow = curscr->_cury;
     SP->curscol = curscr->_curx;
 
+    PDC_doupdate();
+
     return OK;
 }
 
@@ -226,6 +248,7 @@ int wrefresh(WINDOW *win)
 
     PDC_LOG(("wrefresh() - called\n"));
 
+    assert( win);
     if ( !win || (win->_flags & (_PAD|_SUBPAD)) )
         return ERR;
 
@@ -256,14 +279,12 @@ int wredrawln(WINDOW *win, int start, int num)
     PDC_LOG(("wredrawln() - called: win=%p start=%d num=%d\n",
         win, start, num));
 
+    assert( win);
     if (!win || start > win->_maxy || start + num > win->_maxy)
         return ERR;
 
     for (i = start; i < start + num; i++)
-    {
-        win->_firstch[i] = 0;
-        win->_lastch[i] = win->_maxx - 1;
-    }
+        PDC_mark_line_as_changed( win, i);
 
     return OK;
 }
@@ -272,6 +293,7 @@ int redrawwin(WINDOW *win)
 {
     PDC_LOG(("redrawwin() - called: win=%p\n", win));
 
+    assert( win);
     if (!win)
         return ERR;
 

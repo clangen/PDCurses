@@ -1,6 +1,7 @@
 /* PDCurses */
 
 #include <curspriv.h>
+#include <assert.h>
 
 /*man-start**************************************************************
 
@@ -30,39 +31,38 @@ addchstr
 
 ### Description
 
-   These routines write a chtype or cchar_t string directly into
-   the window structure, starting at the current or specified
-   position. The four routines with n as the last argument copy at
-   most n elements, but no more than will fit on the line. If n =
-   -1 then the whole string is copied, up to the maximum number
-   that will fit on the line.
+   These routines write a chtype or cchar_t string directly into the
+   window structure, starting at the current or specified position. The
+   four routines with n as the last argument copy at most n elements,
+   but no more than will fit on the line. If n == -1 then the whole
+   string is copied, up to the maximum number that will fit on the line.
 
-   The cursor position is not advanced. These routines do not check
-   for newline or other special characters, nor does any line
-   wrapping occur.
+   The cursor position is not advanced. These routines do not check for
+   newline or other special characters, nor does any line wrapping
+   occur.
 
 ### Return Value
 
    All functions return OK or ERR.
 
 ### Portability
-                             X/Open    BSD    SYS V
-    addchstr                    Y       -      4.0
-    waddchstr                   Y       -      4.0
-    mvaddchstr                  Y       -      4.0
-    mvwaddchstr                 Y       -      4.0
-    addchnstr                   Y       -      4.0
-    waddchnstr                  Y       -      4.0
-    mvaddchnstr                 Y       -      4.0
-    mvwaddchnstr                Y       -      4.0
-    add_wchstr                  Y
-    wadd_wchstr                 Y
-    mvadd_wchstr                Y
-    mvwadd_wchstr               Y
-    add_wchnstr                 Y
-    wadd_wchnstr                Y
-    mvadd_wchnstr               Y
-    mvwadd_wchnstr              Y
+                             X/Open  ncurses  NetBSD
+    addchstr                    Y       Y       Y
+    waddchstr                   Y       Y       Y
+    mvaddchstr                  Y       Y       Y
+    mvwaddchstr                 Y       Y       Y
+    addchnstr                   Y       Y       Y
+    waddchnstr                  Y       Y       Y
+    mvaddchnstr                 Y       Y       Y
+    mvwaddchnstr                Y       Y       Y
+    add_wchstr                  Y       Y       Y
+    wadd_wchstr                 Y       Y       Y
+    mvadd_wchstr                Y       Y       Y
+    mvwadd_wchstr               Y       Y       Y
+    add_wchnstr                 Y       Y       Y
+    wadd_wchnstr                Y       Y       Y
+    mvadd_wchnstr               Y       Y       Y
+    mvwadd_wchnstr              Y       Y       Y
 
 **man-end****************************************************************/
 
@@ -70,11 +70,13 @@ addchstr
 
 int waddchnstr(WINDOW *win, const chtype *ch, int n)
 {
-    int y, x, maxx, minx;
+    int y, x;
     chtype *ptr;
 
     PDC_LOG(("waddchnstr() - called: win=%p n=%d\n", win, n));
 
+    assert( win);
+    assert( ch);
     if (!win || !ch || !n || n < -1)
         return ERR;
 
@@ -85,30 +87,14 @@ int waddchnstr(WINDOW *win, const chtype *ch, int n)
     if (n == -1 || n > win->_maxx - x)
         n = win->_maxx - x;
 
-    minx = win->_firstch[y];
-    maxx = win->_lastch[y];
-
     for (; n && *ch; n--, x++, ptr++, ch++)
     {
         if (*ptr != *ch)
         {
-            if (x < minx || minx == _NO_CHANGE)
-                minx = x;
-
-            if (x > maxx)
-                maxx = x;
-
-            PDC_LOG(("y %d x %d minx %d maxx %d *ptr %x *ch"
-                     " %x firstch: %d lastch: %d\n",
-                     y, x, minx, maxx, *ptr, *ch,
-                     win->_firstch[y], win->_lastch[y]));
-
+            PDC_mark_cell_as_changed( win, y, x);
             *ptr = *ch;
         }
     }
-
-    win->_firstch[y] = minx;
-    win->_lastch[y] = maxx;
 
     return OK;
 }

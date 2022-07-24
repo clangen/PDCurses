@@ -1,5 +1,6 @@
 /* PDCurses */
 
+#include <assert.h>
 #include <curspriv.h>
 
 /*man-start**************************************************************
@@ -21,26 +22,25 @@ inch
 
 ### Description
 
-   The inch() functions retrieve the character and attribute from
-   the current or specified window position, in the form of a
-   chtype. If a NULL window is specified, (chtype)ERR is returned.
+   The inch() functions retrieve the character and attribute from the
+   current or specified window position, in the form of a chtype. If a
+   NULL window is specified, (chtype)ERR is returned.
 
-   The in_wch() functions are the wide-character versions; instead
-   of returning a chtype, they store a cchar_t at the address
-   specified by wcval, and return OK or ERR. (No value is stored
-   when ERR is returned.) Note that in PDCurses, chtype and cchar_t
-   are the same.
+   The in_wch() functions are the wide-character versions; instead of
+   returning a chtype, they store a cchar_t at the address specified by
+   wcval, and return OK or ERR. (No value is stored when ERR is
+   returned.) Note that in PDCurses, chtype and cchar_t are the same.
 
 ### Portability
-                             X/Open    BSD    SYS V
+                             X/Open  ncurses  NetBSD
     inch                        Y       Y       Y
     winch                       Y       Y       Y
     mvinch                      Y       Y       Y
     mvwinch                     Y       Y       Y
-    in_wch                      Y
-    win_wch                     Y
-    mvin_wch                    Y
-    mvwin_wch                   Y
+    in_wch                      Y       Y       Y
+    win_wch                     Y       Y       Y
+    mvin_wch                    Y       Y       Y
+    mvwin_wch                   Y       Y       Y
 
 **man-end****************************************************************/
 
@@ -48,6 +48,7 @@ chtype winch(WINDOW *win)
 {
     PDC_LOG(("winch() - called\n"));
 
+    assert( win);
     if (!win)
         return (chtype)ERR;
 
@@ -86,6 +87,8 @@ int win_wch(WINDOW *win, cchar_t *wcval)
 {
     PDC_LOG(("win_wch() - called\n"));
 
+    assert( win);
+    assert( wcval);
     if (!win || !wcval)
         return ERR;
 
@@ -105,6 +108,7 @@ int mvin_wch(int y, int x, cchar_t *wcval)
 {
     PDC_LOG(("mvin_wch() - called\n"));
 
+    assert( wcval);
     if (!wcval || (move(y, x) == ERR))
         return ERR;
 
@@ -117,6 +121,7 @@ int mvwin_wch(WINDOW *win, int y, int x, cchar_t *wcval)
 {
     PDC_LOG(("mvwin_wch() - called\n"));
 
+    assert( wcval);
     if (!wcval || (wmove(win, y, x) == ERR))
         return ERR;
 

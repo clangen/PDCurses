@@ -1,6 +1,7 @@
 /* PDCurses */
 
 #include <curspriv.h>
+#include <assert.h>
 
 /*man-start**************************************************************
 
@@ -14,19 +15,19 @@ beep
 
 ### Description
 
-   beep() sounds the audible bell on the terminal, if possible;
-   if not, it calls flash().
+   beep() sounds the audible bell on the terminal, if possible; if not,
+   it calls flash().
 
    flash() "flashes" the screen, by inverting the foreground and
-   background of every cell, pausing, and then restoring the
-   original attributes.
+   background of every cell, pausing, and then restoring the original
+   attributes.
 
 ### Return Value
 
-   These functions return OK.
+   These functions return ERR if called before initscr(), otherwise OK.
 
 ### Portability
-                             X/Open    BSD    SYS V
+                             X/Open  ncurses  NetBSD
     beep                        Y       Y       Y
     flash                       Y       Y       Y
 
@@ -35,6 +36,10 @@ beep
 int beep(void)
 {
     PDC_LOG(("beep() - called\n"));
+
+    assert( SP);
+    if (!SP)
+        return ERR;
 
     if (SP->audible)
         PDC_beep();
@@ -49,6 +54,10 @@ int flash(void)
     int z, y, x;
 
     PDC_LOG(("flash() - called\n"));
+
+    assert( curscr);
+    if (!curscr)
+        return ERR;
 
     /* Reverse each cell; wait; restore the screen */
 
