@@ -1,6 +1,7 @@
 /* PDCurses */
 
 #include <curspriv.h>
+#include <assert.h>
 
 /*man-start**************************************************************
 
@@ -12,37 +13,37 @@ overlay
     int overlay(const WINDOW *src_w, WINDOW *dst_w)
     int overwrite(const WINDOW *src_w, WINDOW *dst_w)
     int copywin(const WINDOW *src_w, WINDOW *dst_w, int src_tr,
-    int src_tc, int dst_tr, int dst_tc, int dst_br,
-    int dst_bc, bool overlay)
+                int src_tc, int dst_tr, int dst_tc, int dst_br,
+                int dst_bc, int _overlay)
 
 ### Description
 
-   overlay() and overwrite() copy all the text from src_w into
-   dst_w. The windows need not be the same size. Those characters
-   in the source window that intersect with the destination window
-   are copied, so that the characters appear in the same physical
-   position on the screen. The difference between the two functions
-   is that overlay() is non-destructive (blanks are not copied)
-   while overwrite() is destructive (blanks are copied).
+   overlay() and overwrite() copy all the text from src_w into dst_w.
+   The windows need not be the same size. Those characters in the source
+   window that intersect with the destination window are copied, so that
+   the characters appear in the same physical position on the screen.
+   The difference between the two functions is that overlay() is non-
+   destructive (blanks are not copied) while overwrite() is destructive
+   (blanks are copied).
 
    copywin() is similar, but doesn't require that the two windows
-   overlap. The arguments src_tc and src_tr specify the top left
-   corner of the region to be copied. dst_tc, dst_tr, dst_br, and
-   dst_bc specify the region within the destination window to copy
-   to. The argument "overlay", if TRUE, indicates that the copy is
-   done non-destructively (as in overlay()); blanks in the source
-   window are not copied to the destination window. When overlay is
-   FALSE, blanks are copied.
+   overlap. The arguments src_tc and src_tr specify the top left corner
+   of the region to be copied. dst_tc, dst_tr, dst_br, and dst_bc
+   specify the region within the destination window to copy to. The
+   argument "overlay", if TRUE, indicates that the copy is done non-
+   destructively (as in overlay()); blanks in the source window are not
+   copied to the destination window. When overlay is FALSE, blanks are
+   copied.
 
 ### Return Value
 
    All functions return OK on success and ERR on error.
 
 ### Portability
-                             X/Open    BSD    SYS V
+                             X/Open  ncurses  NetBSD
     overlay                     Y       Y       Y
     overwrite                   Y       Y       Y
-    copywin                     Y       -      3.0
+    copywin                     Y       Y       Y
 
 **man-end****************************************************************/
 
@@ -53,24 +54,23 @@ static int _copy_win(const WINDOW *src_w, WINDOW *dst_w, int src_tr,
                      int src_tc, int src_br, int src_bc, int dst_tr,
                      int dst_tc, bool _overlay)
 {
-    int col, line, y1, fc, *minchng, *maxchng;
+    int col, line, y1, fc;
     chtype *w1ptr, *w2ptr;
 
     int lc = 0;
     int xdiff = src_bc - src_tc;
     int ydiff = src_br - src_tr;
 
+    assert( src_w);
+    assert( dst_w);
+    assert( dst_tr >= 0);
     if (!src_w || !dst_w)
         return ERR;
 
-    minchng = dst_w->_firstch;
-    maxchng = dst_w->_lastch;
-
-    for (y1 = 0; y1 < dst_tr; y1++)
-    {
-        minchng++;
-        maxchng++;
-    }
+    if( dst_tr < 0)
+        y1 = 0;
+    else
+        y1 = dst_tr;
 
     for (line = 0; line < ydiff; line++)
     {
@@ -96,21 +96,7 @@ static int _copy_win(const WINDOW *src_w, WINDOW *dst_w, int src_tr,
             w2ptr++;
         }
 
-        if (*minchng == _NO_CHANGE)
-        {
-            *minchng = fc;
-            *maxchng = lc;
-        }
-        else if (fc != _NO_CHANGE)
-        {
-            if (fc < *minchng)
-                *minchng = fc;
-            if (lc > *maxchng)
-                *maxchng = lc;
-        }
-
-        minchng++;
-        maxchng++;
+        PDC_mark_cells_as_changed( dst_w, y1 + line, fc, lc);
     }
 
     return OK;
@@ -122,6 +108,8 @@ int _copy_overlap(const WINDOW *src_w, WINDOW *dst_w, bool overlay)
     int src_start_x, src_start_y, dst_start_x, dst_start_y;
     int xdiff, ydiff;
 
+    assert( src_w);
+    assert( dst_w);
     if (!src_w || !dst_w)
         return ERR;
 
@@ -194,6 +182,8 @@ int copywin(const WINDOW *src_w, WINDOW *dst_w, int src_tr, int src_tc,
 
     PDC_LOG(("copywin() - called\n"));
 
+    assert( src_w);
+    assert( dst_w);
     if (!src_w || !dst_w || dst_w == curscr || dst_br >= dst_w->_maxy
         || dst_bc >= dst_w->_maxx || dst_tr < 0 || dst_tc < 0)
         return ERR;

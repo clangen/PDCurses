@@ -1,25 +1,34 @@
-/* Public Domain Curses */
+/* PDCurses */
 
 #include "pdcsdl.h"
 
 #include <stdlib.h>
+#include <limits.h>
 #ifndef PDC_WIDE
-# include "deffont.h"
+# include "../common/font437.h"
 #endif
-#include "deficon.h"
+#include "../common/iconbmp.h"
+#include "../common/pdccolor.h"
+#include "../common/pdccolor.c"
 
 #ifdef PDC_WIDE
 # ifndef PDC_FONT_PATH
 #  ifdef _WIN32
-#   define PDC_FONT_PATH "C:/Windows/Fonts/lucon.ttf"
+#   define PDC_FONT_PATH "C:/Windows/Fonts/consola.ttf"
 #  elif defined(__APPLE__)
-#   define PDC_FONT_PATH "/Library/Fonts/Courier New.ttf"
+#   define PDC_FONT_PATH "/System/Library/Fonts/Menlo.ttc"
 #  else
-#   define PDC_FONT_PATH "/usr/share/fonts/truetype/freefont/FreeMono.ttf"
+#   define PDC_FONT_PATH "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf"
 #  endif
 # endif
 TTF_Font *pdc_ttffont = NULL;
-int pdc_font_size = 18;
+int pdc_font_size =
+# ifdef _WIN32
+ 16;
+# else
+ 17;
+# endif
+int pdc_sdl_render_mode = PDC_SDL_RENDER_BLENDED;
 #endif
 
 SDL_Window *pdc_window = NULL;
@@ -27,17 +36,70 @@ SDL_Surface *pdc_screen = NULL, *pdc_font = NULL, *pdc_icon = NULL,
             *pdc_back = NULL, *pdc_tileback = NULL;
 int pdc_sheight = 0, pdc_swidth = 0, pdc_yoffset = 0, pdc_xoffset = 0;
 
-SDL_Color pdc_color[256];
-Uint32 pdc_mapped[256];
-int pdc_fheight, pdc_fwidth, pdc_flastc;
+int pdc_fheight, pdc_fwidth, pdc_fthick, pdc_flastc;
 bool pdc_own_window;
 
-/* special purpose function keys */
-static int PDC_shutdown_key[PDC_MAX_FUNCTION_KEYS] = { 0, 0, 0, 0, 0 };
+#ifndef PDC_WIDE
 
-/* COLOR_PAIR to attribute encoding table. */
+/* Load a bitmap from bmp_rw and also determine its palette size.
+   ->format->palette->ncolors may be greater than the actual size.
+   To get the real palette size, some custom bitmap parsing is needed. */
 
-static struct {short f, b;} atrtab[PDC_COLOR_PAIRS];
+static SDL_Surface *_load_bmp_and_palette_size(SDL_RWops *bmp_rw, int *palette_size)
+{
+    SDL_Surface *bmp = NULL;
+    Sint64 start_offset;
+
+    *palette_size = -1;
+    if (!bmp_rw)
+        return( NULL);
+
+    start_offset = SDL_RWtell(bmp_rw);
+
+    /* Non-monochromatic bitmaps only */
+    if( start_offset >= 0 && (bmp = SDL_LoadBMP_RW(bmp_rw, 0)) != NULL
+                            && bmp->format->palette)
+    {
+        *palette_size = bmp->format->palette->ncolors;
+
+        /* Offsets from https://en.wikipedia.org/wiki/BMP_file_format#DIB_header_(bitmap_information_header) */
+        if (SDL_RWseek(bmp_rw, start_offset + 14, RW_SEEK_SET) >= 0)
+        {
+            const Uint32 header_size = SDL_ReadLE32(bmp_rw);
+
+            /* If the info header is at least 40 bytes in size, palette size
+               information is available. */
+            if (header_size >= 40
+                    && SDL_RWseek(bmp_rw, start_offset + 46, RW_SEEK_SET) >= 0)
+            {
+                Uint32 num_colors = SDL_ReadLE32(bmp_rw);
+
+                if (num_colors > 0 && num_colors <= (Uint32)INT_MAX &&
+                    (int)num_colors <= bmp->format->palette->ncolors)
+                         *palette_size = (int)num_colors;
+                else
+                {
+                    /* Fall back to calculating num_colors from bits_per_pixel. */
+
+                    if (SDL_RWseek(bmp_rw, start_offset + 28, RW_SEEK_SET) >= 0)
+                    {
+                        const Uint16 bits_per_pixel = SDL_ReadLE16(bmp_rw);
+
+                        num_colors = (Uint32)1 << bits_per_pixel;
+                        if (num_colors > 0 && num_colors <= (Uint32)INT_MAX &&
+                            (int)num_colors <= bmp->format->palette->ncolors)
+                                      *palette_size = (int)num_colors;
+                    }
+                }
+            }
+        }
+    }
+
+    SDL_RWclose(bmp_rw);
+    return bmp;
+}
+
+#endif
 
 static void _clean(void)
 {
@@ -95,37 +157,42 @@ void PDC_scr_close(void)
 
 void PDC_scr_free(void)
 {
-    if (SP)
-        free(SP);
 }
 
-/* This is called twice a second,  in a separate thread,  and 'pushes' an
-event to the main thread.  See https://wiki.libsdl.org/SDL_AddTimer for
-more info.  The result redraws cursor and blinking text every 500 ms. */
 
-Uint32 timer_callback( Uint32 interval, void *param)
+/* find the display where the mouse pointer is */
+
+int _get_displaynum(void)
+{
+    SDL_Rect size;
+    int i, xpos, ypos, displays;
+
+    displays = SDL_GetNumVideoDisplays();
+
+    if (displays > 1)
+    {
+        SDL_GetGlobalMouseState(&xpos, &ypos);
+
+        for (i = 0; i < displays; i++)
+        {
+            SDL_GetDisplayBounds(i, &size);
+            if (size.x <= xpos && xpos < size.x + size.w &&
+                size.y <= ypos && ypos < size.y + size.h)
+                return i;
+        }
+    }
+
+    return 0;
+}
+
+/* open the physical screen -- miscellaneous initialization */
+
+int PDC_scr_open(void)
 {
     SDL_Event event;
-
-    event.type = SDL_USEREVENT;
-    SDL_PushEvent( &event);
-    return( interval);
-}
-
-static int default_pdc_swidth = 80, default_pdc_sheight = 25;
-
-/* open the physical screen -- allocate SP, miscellaneous intialization */
-
-int PDC_scr_open(int argc, char **argv)
-{
-    int i, r, g, b;
+    int displaynum = 0;
 
     PDC_LOG(("PDC_scr_open() - called\n"));
-
-    SP = calloc(1, sizeof(SCREEN));
-
-    if (!SP)
-        return ERR;
 
     pdc_own_window = !pdc_window;
 
@@ -136,9 +203,10 @@ int PDC_scr_open(int argc, char **argv)
             fprintf(stderr, "Could not start SDL: %s\n", SDL_GetError());
             return ERR;
         }
-        SDL_AddTimer( 500, timer_callback, NULL);  /* 500 millisec blink */
 
         atexit(_clean);
+
+        displaynum = _get_displaynum();
     }
 
 #ifdef PDC_WIDE
@@ -174,19 +242,32 @@ int PDC_scr_open(int argc, char **argv)
 
     SP->mono = FALSE;
 #else
-    if (!pdc_font)
+    if (pdc_font)
     {
-        const char *fname = getenv("PDC_FONT");
-        pdc_font = SDL_LoadBMP(fname ? fname : "pdcfont.bmp");
+        if (pdc_font->format->palette)
+            pdc_flastc = pdc_font->format->palette->ncolors - 1;
     }
-
-    if (!pdc_font)
-        pdc_font = SDL_LoadBMP_RW(SDL_RWFromMem(deffont, sizeof(deffont)), 0);
-
-    if (!pdc_font)
+    else
     {
-        fprintf(stderr, "Could not load font\n");
-        return ERR;
+        int palette_size;
+
+        const char *fname = getenv("PDC_FONT");
+        SDL_RWops *file = SDL_RWFromFile(fname ? fname : "pdcfont.bmp", "r");
+        if (file)
+            pdc_font = _load_bmp_and_palette_size(file, &palette_size);
+
+        if (!pdc_font)
+            pdc_font = _load_bmp_and_palette_size(
+                SDL_RWFromMem(font437, sizeof(font437)), &palette_size);
+
+        if (!pdc_font)
+        {
+            fprintf(stderr, "Could not load font\n");
+            return ERR;
+        }
+
+        if (pdc_font->format->palette)
+            pdc_flastc = palette_size - 1;
     }
 
     SP->mono = !pdc_font->format->palette;
@@ -209,12 +290,11 @@ int PDC_scr_open(int argc, char **argv)
 
 #ifdef PDC_WIDE
     TTF_SizeText(pdc_ttffont, "W", &pdc_fwidth, &pdc_fheight);
+    pdc_fthick = pdc_font_size / 20 + 1;
 #else
     pdc_fheight = pdc_font->h / 8;
     pdc_fwidth = pdc_font->w / 32;
-
-    if (!SP->mono)
-        pdc_flastc = pdc_font->format->palette->ncolors - 1;
+    pdc_fthick = 1;
 #endif
 
     if (pdc_own_window && !pdc_icon)
@@ -223,101 +303,85 @@ int PDC_scr_open(int argc, char **argv)
         pdc_icon = SDL_LoadBMP(iname ? iname : "pdcicon.bmp");
 
         if (!pdc_icon)
-            pdc_icon = SDL_LoadBMP_RW(SDL_RWFromMem(deficon,
-                                                    sizeof(deficon)), 0);
+            pdc_icon = SDL_LoadBMP_RW(SDL_RWFromMem(iconbmp,
+                                                    sizeof(iconbmp)), 0);
     }
 
     if (pdc_own_window)
     {
-        const char *env = getenv("PDC_LINES");
-        pdc_sheight = (env ? atoi(env) : default_pdc_sheight) * pdc_fheight;
+        if( !pdc_sheight)
+        {
+            const char *env = getenv("PDC_LINES");
+            pdc_sheight = (env ? atoi(env) : 25);
+        }
+        pdc_sheight *= pdc_fheight;
 
-        env = getenv("PDC_COLS");
-        pdc_swidth = (env ? atoi(env) : default_pdc_swidth) * pdc_fwidth;
+        if( !pdc_swidth)
+        {
+            const char *env = getenv("PDC_COLS");
+            pdc_swidth = (env ? atoi(env) : 80);
+        }
+        pdc_swidth *= pdc_fwidth;
 
-        pdc_window = SDL_CreateWindow((argc ? argv[0] : "PDCurses"), SDL_WINDOWPOS_UNDEFINED,
-                          SDL_WINDOWPOS_UNDEFINED, pdc_swidth, pdc_sheight,
-                          SDL_WINDOW_RESIZABLE);
+        pdc_window = SDL_CreateWindow("PDCurses",
+            SDL_WINDOWPOS_CENTERED_DISPLAY(displaynum),
+            SDL_WINDOWPOS_CENTERED_DISPLAY(displaynum),
+            pdc_swidth, pdc_sheight, SDL_WINDOW_RESIZABLE);
+
         if (pdc_window == NULL)
         {
             fprintf(stderr, "Could not open SDL window: %s\n", SDL_GetError());
             return ERR;
         }
+
         SDL_SetWindowIcon(pdc_window, pdc_icon);
+    }
 
-        /* Events must be pumped before calling SDL_GetWindowSurface, or
-           initial modifiers (e.g. numlock) will be ignored and out-of-sync. */
-        SDL_PumpEvents();
+    /* Events must be pumped before calling SDL_GetWindowSurface, or
+       initial modifiers (e.g. numlock) will be ignored and out-of-sync. */
 
+    SDL_PumpEvents();
+
+    /* Wait until window is exposed before getting surface */
+
+    while (SDL_PollEvent(&event))
+        if (SDL_WINDOWEVENT == event.type &&
+            SDL_WINDOWEVENT_EXPOSED == event.window.event)
+            break;
+
+    if( !pdc_screen)
+    {
         pdc_screen = SDL_GetWindowSurface(pdc_window);
-        if (pdc_screen == NULL)
+
+        if( !pdc_screen)
         {
-            fprintf(stderr, "Could not open SDL window surface: %s\n", SDL_GetError());
+            fprintf(stderr, "Could not open SDL window surface: %s\n",
+                    SDL_GetError());
             return ERR;
         }
     }
-    else
-    {
-        if (!pdc_screen)
-            pdc_screen = SDL_GetWindowSurface(pdc_window);
 
-        if (!pdc_sheight)
-            pdc_sheight = pdc_screen->h - pdc_yoffset;
+    if (!pdc_sheight)
+        pdc_sheight = pdc_screen->h - pdc_yoffset;
 
-        if (!pdc_swidth)
-            pdc_swidth = pdc_screen->w - pdc_xoffset;
-    }
-
-    if (!pdc_screen)
-    {
-        fprintf(stderr, "Couldn't create a surface: %s\n", SDL_GetError());
-        return ERR;
-    }
+    if (!pdc_swidth)
+        pdc_swidth = pdc_screen->w - pdc_xoffset;
 
     if (SP->orig_attr)
         PDC_retile();
-
-    COLORS = 256;       /* we have 256 colors in this flavor of PDCurses */
-    for (i = 0; i < 8; i++)
-    {
-        pdc_color[i].r = (i & COLOR_RED) ? 0xc0 : 0;
-        pdc_color[i].g = (i & COLOR_GREEN) ? 0xc0 : 0;
-        pdc_color[i].b = (i & COLOR_BLUE) ? 0xc0 : 0;
-
-        pdc_color[i + 8].r = (i & COLOR_RED) ? 0xff : 0x40;
-        pdc_color[i + 8].g = (i & COLOR_GREEN) ? 0xff : 0x40;
-        pdc_color[i + 8].b = (i & COLOR_BLUE) ? 0xff : 0x40;
-    }
-
-           /* 256-color xterm extended palette:  216 colors in a
-            6x6x6 color cube,  plus 24 (not 50) shades of gray */
-    i = 16;
-    for( r = 0; r < 6; r++)
-        for( g = 0; g < 6; g++)
-            for( b = 0; b < 6; b++, i++)
-            {
-                pdc_color[i].r = ( r ? r * 40 + 55 : 0);
-                pdc_color[i].g = ( g ? g * 40 + 55 : 0);
-                pdc_color[i].b = ( b ? b * 40 + 55 : 0);
-            }
-    for( i = 232; i < 256; i++)
-        pdc_color[i].r = pdc_color[i].g = pdc_color[i].b = (i - 232) * 10 + 8;
-    for (i = 0; i < 256; i++)
-        pdc_mapped[i] = SDL_MapRGB(pdc_screen->format, pdc_color[i].r,
-                                   pdc_color[i].g, pdc_color[i].b);
 
     SDL_StartTextInput();
 
     PDC_mouse_set();
 
-    if (pdc_own_window)
-        PDC_set_title(argc ? argv[0] : "PDCurses");
-
-    SP->lines = PDC_get_rows();
-    SP->cols = PDC_get_columns();
-
     SP->mouse_wait = PDC_CLICK_PERIOD;
     SP->audible = FALSE;
+
+    SP->termattrs = A_COLOR | A_UNDERLINE | A_LEFT | A_RIGHT | A_REVERSE
+                            | A_OVERLINE | A_STRIKEOUT;
+#ifdef PDC_WIDE
+    SP->termattrs |= A_ITALIC;
+#endif
 
     PDC_reset_prog_mode();
 
@@ -328,10 +392,10 @@ int PDC_scr_open(int argc, char **argv)
 
 int PDC_resize_screen(int nlines, int ncols)
 {
-    if (!stdscr)      /* window hasn't been created yet;  we're */
-    {                 /* specifying its size before doing so    */
-        default_pdc_swidth = ncols;
-        default_pdc_sheight = nlines;
+    if( !stdscr)     /* Specifying the  initial screen size */
+    {                /* before calling initscr().           */
+        pdc_sheight = nlines;
+        pdc_swidth = ncols;
         return OK;
     }
 
@@ -340,18 +404,29 @@ int PDC_resize_screen(int nlines, int ncols)
 
     if (nlines && ncols)
     {
+#if SDL_VERSION_ATLEAST(2, 0, 5)
+        SDL_Rect max;
+        int top, left, bottom, right;
+
+        SDL_GetDisplayUsableBounds(0, &max);
+        SDL_GetWindowBordersSize(pdc_window, &top, &left, &bottom, &right);
+        max.h -= top + bottom;
+        max.w -= left + right;
+
+        while (nlines * pdc_fheight > max.h)
+            nlines--;
+        while (ncols * pdc_fwidth > max.w)
+            ncols--;
+#endif
         pdc_sheight = nlines * pdc_fheight;
         pdc_swidth = ncols * pdc_fwidth;
-    }
 
-    SDL_SetWindowSize(pdc_window, pdc_swidth, pdc_sheight);
-    pdc_screen = SDL_GetWindowSurface(pdc_window);
+        SDL_SetWindowSize(pdc_window, pdc_swidth, pdc_sheight);
+        pdc_screen = SDL_GetWindowSurface(pdc_window);
+    }
 
     if (pdc_tileback)
         PDC_retile();
-
-    SP->resized = FALSE;
-    SP->cursrow = SP->curscol = 0;
 
     return OK;
 }
@@ -372,24 +447,12 @@ void PDC_reset_shell_mode(void)
 
 void PDC_restore_screen_mode(int i)
 {
+   INTENTIONALLY_UNUSED_PARAMETER( i);
 }
 
 void PDC_save_screen_mode(int i)
 {
-}
-
-void PDC_init_pair(short pair, short fg, short bg)
-{
-    atrtab[pair].f = fg;
-    atrtab[pair].b = bg;
-}
-
-int PDC_pair_content(short pair, short *fg, short *bg)
-{
-    *fg = atrtab[pair].f;
-    *bg = atrtab[pair].b;
-
-    return OK;
+   INTENTIONALLY_UNUSED_PARAMETER( i);
 }
 
 bool PDC_can_change_color(void)
@@ -397,26 +460,25 @@ bool PDC_can_change_color(void)
     return TRUE;
 }
 
-int PDC_color_content(short color, short *red, short *green, short *blue)
+int PDC_color_content( int color, int *red, int *green, int *blue)
 {
-    *red = DIVROUND(pdc_color[color].r * 1000, 255);
-    *green = DIVROUND(pdc_color[color].g * 1000, 255);
-    *blue = DIVROUND(pdc_color[color].b * 1000, 255);
+    const PACKED_RGB col = PDC_get_palette_entry( color);
+
+    *red = DIVROUND( Get_RValue(col) * 1000, 255);
+    *green = DIVROUND( Get_GValue(col) * 1000, 255);
+    *blue = DIVROUND( Get_BValue(col) * 1000, 255);
 
     return OK;
 }
 
-int PDC_init_color(short color, short red, short green, short blue)
+int PDC_init_color( int color, int red, int green, int blue)
 {
-    pdc_color[color].r = DIVROUND(red * 255, 1000);
-    pdc_color[color].g = DIVROUND(green * 255, 1000);
-    pdc_color[color].b = DIVROUND(blue * 255, 1000);
+    const PACKED_RGB new_rgb = PACK_RGB(DIVROUND(red * 255, 1000),
+                                 DIVROUND(green * 255, 1000),
+                                 DIVROUND(blue * 255, 1000));
 
-    pdc_mapped[color] = SDL_MapRGB(pdc_screen->format, pdc_color[color].r,
-                                   pdc_color[color].g, pdc_color[color].b);
-
-    wrefresh(curscr);
-
+    if( !PDC_set_palette_entry( color, new_rgb))
+        curscr->_clear = TRUE;
     return OK;
 }
 
@@ -427,17 +489,12 @@ versions of this function for details. */
 void PDC_set_resize_limits( const int new_min_lines, const int new_max_lines,
                   const int new_min_cols, const int new_max_cols)
 {
+   INTENTIONALLY_UNUSED_PARAMETER( new_min_lines);
+   INTENTIONALLY_UNUSED_PARAMETER( new_max_lines);
+   INTENTIONALLY_UNUSED_PARAMETER( new_min_cols);
+   INTENTIONALLY_UNUSED_PARAMETER( new_max_cols);
 }
 
-/* PDC_set_function_key() does nothing on this platform */
-int PDC_set_function_key( const unsigned function, const int new_key)
+void PDC_free_platform_dependent_memory( void)
 {
-    int old_key = -1;
-
-    if( function < PDC_MAX_FUNCTION_KEYS)
-    {
-         old_key = PDC_shutdown_key[function];
-         PDC_shutdown_key[function] = new_key;
-    }
-    return( old_key);
 }

@@ -1,13 +1,30 @@
 /* Public Domain Curses */
 
 #include "pdcwin.h"
+#ifdef WIN32_LEAN_AND_MEAN
+#include <mmsystem.h>
+#include <process.h>
+#endif
+
+static volatile int _beep_count = 0;
+
+static void beep_thread(LPVOID lpParameter)
+{
+    INTENTIONALLY_UNUSED_PARAMETER( lpParameter);
+    while( _beep_count)
+    {
+        if (!PlaySound((LPCTSTR) SND_ALIAS_SYSTEMDEFAULT, NULL, SND_ALIAS_ID))
+            Beep(800, 200);
+        _beep_count--;
+    }
+}
 
 void PDC_beep(void)
 {
     PDC_LOG(("PDC_beep() - called\n"));
-
-/*  MessageBeep(MB_OK); */
-    MessageBeep(0XFFFFFFFF);
+    _beep_count++;
+    if( _beep_count == 1)
+        _beginthread( beep_thread, 0, NULL);
 }
 
 void PDC_napms(int ms)     /* 'ms' = milli,  _not_ microseconds! */
@@ -45,17 +62,4 @@ const char *PDC_sysname(void)
    return "WinGUI";
 }
 
-PDC_version_info PDC_version = { PDC_PORT_WINGUI,
-          PDC_VER_MAJOR, PDC_VER_MINOR, PDC_VER_CHANGE,
-          sizeof( chtype),
-#ifdef PDC_WIDE
-          TRUE,
-#else
-          FALSE,
-#endif
-#ifdef PDC_FORCE_UTF8
-          TRUE,
-#else
-          FALSE,
-#endif
-          };
+enum PDC_port PDC_port_val = PDC_PORT_WINGUI;

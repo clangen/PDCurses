@@ -1,6 +1,7 @@
 /* PDCurses */
 
 #include <curspriv.h>
+#include <assert.h>
 
 /*man-start**************************************************************
 
@@ -16,6 +17,8 @@ panel
     PANEL *new_panel(WINDOW *win);
     PANEL *panel_above(const PANEL *pan);
     PANEL *panel_below(const PANEL *pan);
+    PANEL *ground_panel(SCREEN *sp);
+    PANEL *ceiling_panel(SCREEN *sp);
     int panel_hidden(const PANEL *pan);
     const void *panel_userptr(const PANEL *pan);
     WINDOW *panel_window(const PANEL *pan);
@@ -27,99 +30,97 @@ panel
 
 ### Description
 
-   The panel library is built using the curses library, and any
-   program using panels routines must call one of the curses
-   initialization routines such as initscr(). A program using these
-   routines must be linked with the panels and curses libraries.
-   The header <panel.h> includes the header <curses.h>.
+   For historic reasons, and for compatibility with other versions of
+   curses, the panel functions are prototyped in a separate header,
+   panel.h. In many implementations, they're also in a separate library,
+   but PDCurses incorporates them.
 
-   The panels package gives the applications programmer a way to
-   have depth relationships between curses windows; a curses window
-   is associated with every panel. The panels routines allow curses
-   windows to overlap without making visible the overlapped
-   portions of underlying windows. The initial curses window,
-   stdscr, lies beneath all panels. The set of currently visible
-   panels is the 'deck' of panels.
+   The panel functions provide a way to have depth relationships between
+   curses windows. Panels can overlap without making visible the
+   overlapped portions of underlying windows. The initial curses window,
+   stdscr, lies beneath all panels. The set of currently visible panels
+   is the 'deck' of panels.
 
-   The panels package allows the applications programmer to create
-   panels, fetch and set their associated windows, shuffle panels
-   in the deck, and manipulate panels in other ways.
+   You can create panels, fetch and set their associated windows,
+   shuffle panels in the deck, and manipulate them in other ways.
 
    bottom_panel() places pan at the bottom of the deck. The size,
    location and contents of the panel are unchanged.
 
    del_panel() deletes pan, but not its associated winwow.
 
-   hide_panel() removes a panel from the deck and thus hides it
-   from view.
+   hide_panel() removes a panel from the deck and thus hides it from
+   view.
 
-   move_panel() moves the curses window associated with pan, so
-   that its upper lefthand corner is at the supplied coordinates.
-   (Do not use mvwin() on the window.)
+   move_panel() moves the curses window associated with pan, so that its
+   upper lefthand corner is at the supplied coordinates. (Don't use
+   mvwin() on the window.)
 
-   new_panel() creates a new panel associated with win and returns
-   the panel pointer. The new panel is placed at the top of the
-   deck.
+   new_panel() creates a new panel associated with win and returns the
+   panel pointer. The new panel is placed at the top of the deck.
 
-   panel_above() returns a pointer to the panel in the deck above
-   pan, or NULL if pan is the top panel. If the value of pan passed
-   is NULL, this function returns a pointer to the bottom panel in
-   the deck.
+   panel_above() returns a pointer to the panel in the deck above pan,
+   or NULL if pan is the top panel. If the value of pan passed is NULL,
+   this function returns a pointer to the bottom panel in the deck.
 
-   panel_below() returns a pointer to the panel in the deck below
-   pan, or NULL if pan is the bottom panel. If the value of pan
-   passed is NULL, this function returns a pointer to the top panel
-   in the deck.
+   panel_below() returns a pointer to the panel in the deck below pan,
+   or NULL if pan is the bottom panel. If the value of pan passed is
+   NULL, this function returns a pointer to the top panel in the deck.
+
+   ground_panel() returns a pointer to the bottom panel in the deck.
+
+   ceiling_panel() returns a pointer to the top panel in the deck.
 
    panel_hidden() returns OK if pan is hidden and ERR if it is not.
 
    panel_userptr() - Each panel has a user pointer available for
-   maintaining relevant information. This function returns a
-   pointer to that information previously set up by
-   set_panel_userptr().
+   maintaining relevant information. This function returns a pointer to
+   that information previously set up by set_panel_userptr().
 
-   panel_window() returns a pointer to the curses window associated
-   with the panel.
+   panel_window() returns a pointer to the curses window associated with
+   the panel.
 
    replace_panel() replaces the current window of pan with win.
 
-   set_panel_userptr() - Each panel has a user pointer available
-   for maintaining relevant information. This function sets the
-   value of that information.
+   set_panel_userptr() - Each panel has a user pointer available for
+   maintaining relevant information. This function sets the value of
+   that information.
 
-   show_panel() makes a previously hidden panel visible and places
-   it back in the deck on top.
+   show_panel() makes a previously hidden panel visible and places it
+   back in the deck on top.
 
-   top_panel() places pan on the top of the deck. The size,
-   location and contents of the panel are unchanged.
+   top_panel() places pan on the top of the deck. The size, location and
+   contents of the panel are unchanged.
 
-   update_panels() refreshes the virtual screen to reflect the
-   depth relationships between the panels in the deck. The user
-   must use doupdate() to refresh the physical screen.
+   update_panels() refreshes the virtual screen to reflect the depth
+   relationships between the panels in the deck. The user must use
+   doupdate() to refresh the physical screen.
 
 ### Return Value
 
-   Each routine that returns a pointer to an object returns NULL if
-   an error occurs. Each panel routine that returns an integer,
-   returns OK if it executes successfully and ERR if it does not.
+   Each routine that returns a pointer to an object returns NULL if an
+   error occurs. Each panel routine that returns an integer, returns OK
+   if it executes successfully and ERR if it does not.
 
 ### Portability
-                             X/Open    BSD    SYS V
-    bottom_panel                -       -       Y
-    del_panel                   -       -       Y
-    hide_panel                  -       -       Y
-    move_panel                  -       -       Y
-    new_panel                   -       -       Y
-    panel_above                 -       -       Y
-    panel_below                 -       -       Y
-    panel_hidden                -       -       Y
-    panel_userptr               -       -       Y
-    panel_window                -       -       Y
-    replace_panel               -       -       Y
-    set_panel_userptr           -       -       Y
-    show_panel                  -       -       Y
-    top_panel                   -       -       Y
-    update_panels               -       -       Y
+                             X/Open  ncurses  NetBSD
+    bottom_panel                -       Y       Y
+    del_panel                   -       Y       Y
+    hide_panel                  -       Y       Y
+    move_panel                  -       Y       Y
+    new_panel                   -       Y       Y
+    panel_above                 -       Y       Y
+    panel_below                 -       Y       Y
+    ground_panel                -       Y       N
+    ceiling_panel               -       Y       N
+    panel_hidden                -       Y       Y
+    panel_userptr               -       Y       Y
+    panel_window                -       Y       Y
+    replace_panel               -       Y       Y
+    set_panel_userptr           -       Y       Y
+    show_panel                  -       Y       Y
+    top_panel                   -       Y       Y
+    update_panels               -       Y       Y
 
   Credits:
     Original Author - Warren Tucker <wht@n4hgf.mt-park.ga.us>
@@ -131,7 +132,7 @@ panel
 
 PANEL *_bottom_panel = (PANEL *)0;
 PANEL *_top_panel = (PANEL *)0;
-PANEL _stdscr_pseudo_panel = { (WINDOW *)0 };
+PANEL _stdscr_pseudo_panel;
 
 #ifdef PANEL_DEBUG
 
@@ -198,6 +199,8 @@ static void Touchline(PANEL *pan, int start, int count)
 
 static bool _panels_overlapped(PANEL *pan1, PANEL *pan2)
 {
+    assert( pan1);
+    assert( pan2);
     if (!pan1 || !pan2)
         return FALSE;
 
@@ -412,6 +415,7 @@ static void _panel_unlink(PANEL *pan)
 
 int bottom_panel(PANEL *pan)
 {
+    assert( pan);
     if (!pan)
         return ERR;
 
@@ -428,6 +432,7 @@ int bottom_panel(PANEL *pan)
 
 int del_panel(PANEL *pan)
 {
+    assert( pan);
     if (pan)
     {
         if (_panel_is_linked(pan))
@@ -442,6 +447,7 @@ int del_panel(PANEL *pan)
 
 int hide_panel(PANEL *pan)
 {
+    assert( pan);
     if (!pan)
         return ERR;
 
@@ -460,8 +466,9 @@ int hide_panel(PANEL *pan)
 int move_panel(PANEL *pan, int starty, int startx)
 {
     WINDOW *win;
-    int maxy, maxx;
+    int maxy, maxx, rval;
 
+    assert( pan);
     if (!pan)
         return ERR;
 
@@ -470,23 +477,30 @@ int move_panel(PANEL *pan, int starty, int startx)
 
     win = pan->win;
 
-    if (mvwin(win, starty, startx) == ERR)
-        return ERR;
-
-    getbegyx(win, pan->wstarty, pan->wstartx);
-    getmaxyx(win, maxy, maxx);
-    pan->wendy = pan->wstarty + maxy;
-    pan->wendx = pan->wstartx + maxx;
+    rval = mvwin(win, starty, startx);
+    if( rval != ERR)
+    {
+        getbegyx(win, pan->wstarty, pan->wstartx);
+        getmaxyx(win, maxy, maxx);
+        pan->wendy = pan->wstarty + maxy;
+        pan->wendx = pan->wstartx + maxx;
+    }
 
     if (_panel_is_linked(pan))
         _calculate_obscure();
 
-    return OK;
+    return rval;
 }
 
 PANEL *new_panel(WINDOW *win)
 {
-    PANEL *pan = malloc(sizeof(PANEL));
+    PANEL *pan;
+
+    assert( win);
+    if (!win)
+        return (PANEL *)NULL;
+
+    pan  = malloc(sizeof(PANEL));
 
     if (!_stdscr_pseudo_panel.win)
     {
@@ -532,8 +546,21 @@ PANEL *panel_below(const PANEL *pan)
     return pan ? pan->below : _top_panel;
 }
 
+PANEL *ceiling_panel( SCREEN *sp)
+{
+   INTENTIONALLY_UNUSED_PARAMETER( sp);
+   return( panel_below( NULL));
+}
+
+PANEL *ground_panel( SCREEN *sp)
+{
+   INTENTIONALLY_UNUSED_PARAMETER( sp);
+   return( panel_above( NULL));
+}
+
 int panel_hidden(const PANEL *pan)
 {
+    assert( pan);
     if (!pan)
         return ERR;
 
@@ -542,12 +569,17 @@ int panel_hidden(const PANEL *pan)
 
 const void *panel_userptr(const PANEL *pan)
 {
+    assert( pan);
     return pan ? pan->user : NULL;
 }
 
 WINDOW *panel_window(const PANEL *pan)
 {
     PDC_LOG(("panel_window() - called\n"));
+
+    assert( pan);
+    if (!pan)
+        return (WINDOW *)NULL;
 
     return pan->win;
 }
@@ -556,6 +588,8 @@ int replace_panel(PANEL *pan, WINDOW *win)
 {
     int maxy, maxx;
 
+    assert( pan);
+    assert( win);
     if (!pan)
         return ERR;
 
@@ -576,6 +610,7 @@ int replace_panel(PANEL *pan, WINDOW *win)
 
 int set_panel_userptr(PANEL *pan, const void *uptr)
 {
+    assert( pan);
     if (!pan)
         return ERR;
 
@@ -585,6 +620,7 @@ int set_panel_userptr(PANEL *pan, const void *uptr)
 
 int show_panel(PANEL *pan)
 {
+    assert( pan);
     if (!pan)
         return ERR;
 
@@ -601,6 +637,7 @@ int show_panel(PANEL *pan)
 
 int top_panel(PANEL *pan)
 {
+    assert( pan);
     return show_panel(pan);
 }
 

@@ -1,6 +1,7 @@
 /* PDCurses */
 
 #include <curspriv.h>
+#include <assert.h>
 
 /*man-start**************************************************************
 
@@ -40,60 +41,69 @@ border
     int mvvline_set(int y, int x, const cchar_t *wch, int n);
     int mvwhline_set(WINDOW *win, int y, int x, const cchar_t *wch, int n);
     int mvwvline_set(WINDOW *win, int y, int x, const cchar_t *wch, int n);
+    int PDC_set_box_type( const int box_type);
 
 ### Description
 
-   border(), wborder(), and box() draw a border around the edge of
-   the window. If any argument is zero, an appropriate default is
-   used:
+   border(), wborder(), and box() draw a border around the edge of the
+   window. If any argument is zero, an appropriate default is used:
 
-   ls    left side of border             ACS_VLINE
-   rs    right side of border            ACS_VLINE
-   ts    top side of border              ACS_HLINE
-   bs    bottom side of border           ACS_HLINE
-   tl    top left corner of border       ACS_ULCORNER
-   tr    top right corner of border      ACS_URCORNER
-   bl    bottom left corner of border    ACS_LLCORNER
-   br    bottom right corner of border   ACS_LRCORNER
+    ls    left side of border             ACS_VLINE
+    rs    right side of border            ACS_VLINE
+    ts    top side of border              ACS_HLINE
+    bs    bottom side of border           ACS_HLINE
+    tl    top left corner of border       ACS_ULCORNER
+    tr    top right corner of border      ACS_URCORNER
+    bl    bottom left corner of border    ACS_LLCORNER
+    br    bottom right corner of border   ACS_LRCORNER
 
-   hline() and whline() draw a horizontal line, using ch, starting
-   from the current cursor position. The cursor position does not
-   change. The line is at most n characters long, or as many as
-   will fit in the window.
+   PDC_set_box_type() can reset these defaults to use the double-line
+   characters.  'box_type' can include the bitflag constants.
+   PDC_BOX_DOUBLED_V and/or PDC_BOX_DOUBLED_H.  The previously set
+   default box type is returned.
 
-   vline() and wvline() draw a vertical line, using ch, starting
-   from the current cursor position. The cursor position does not
-   change. The line is at most n characters long, or as many as
-   will fit in the window.
+   hline() and whline() draw a horizontal line, using ch, starting from
+   the current cursor position. The cursor position does not change. The
+   line is at most n characters long, or as many as will fit in the
+   window.
+
+   vline() and wvline() draw a vertical line, using ch, starting from
+   the current cursor position. The cursor position does not change. The
+   line is at most n characters long, or as many as will fit in the
+   window.
+
+   The *_set functions are the "wide-character" versions, taking
+   pointers to cchar_t instead of chtype. Note that in PDCurses, chtype
+   and cchar_t are the same.
 
 ### Return Value
 
    These functions return OK on success and ERR on error.
 
 ### Portability
-                             X/Open    BSD    SYS V
-    border                      Y       -      4.0
-    wborder                     Y       -      4.0
+                             X/Open  ncurses  NetBSD
+    border                      Y       Y       Y
+    wborder                     Y       Y       Y
     box                         Y       Y       Y
-    hline                       Y       -      4.0
-    vline                       Y       -      4.0
-    whline                      Y       -      4.0
-    wvline                      Y       -      4.0
-    mvhline                     Y
-    mvvline                     Y
-    mvwhline                    Y
-    mvwvline                    Y
-    border_set                  Y
-    wborder_set                 Y
-    box_set                     Y
-    hline_set                   Y
-    vline_set                   Y
-    whline_set                  Y
-    wvline_set                  Y
-    mvhline_set                 Y
-    mvvline_set                 Y
-    mvwhline_set                Y
-    mvwvline_set                Y
+    hline                       Y       Y       Y
+    vline                       Y       Y       Y
+    whline                      Y       Y       Y
+    wvline                      Y       Y       Y
+    mvhline                     Y       Y       Y
+    mvvline                     Y       Y       Y
+    mvwhline                    Y       Y       Y
+    mvwvline                    Y       Y       Y
+    border_set                  Y       Y       Y
+    wborder_set                 Y       Y       Y
+    box_set                     Y       Y       Y
+    hline_set                   Y       Y       Y
+    vline_set                   Y       Y       Y
+    whline_set                  Y       Y       Y
+    wvline_set                  Y       Y       Y
+    mvhline_set                 Y       Y       Y
+    mvvline_set                 Y       Y       Y
+    mvwhline_set                Y       Y       Y
+    mvwvline_set                Y       Y       Y
 
 **man-end****************************************************************/
 
@@ -131,27 +141,50 @@ static chtype _attr_passthru(WINDOW *win, chtype ch)
     return ch;
 }
 
+static int _box_type = 0;
+
+
+int PDC_set_box_type( const int box_type)
+{
+   const int rval = _box_type;
+
+   _box_type = box_type;
+   return( rval);
+}
+
 int wborder(WINDOW *win, chtype ls, chtype rs, chtype ts, chtype bs,
             chtype tl, chtype tr, chtype bl, chtype br)
 {
     int i, ymax, xmax;
+    chtype def_val;
+    const int doubled_v = (_box_type & PDC_BOX_DOUBLED_V);
+    const int doubled_h = (_box_type & PDC_BOX_DOUBLED_H);
 
     PDC_LOG(("wborder() - called\n"));
 
+    assert( win);
     if (!win)
         return ERR;
 
     ymax = win->_maxy - 1;
     xmax = win->_maxx - 1;
 
-    ls = _attr_passthru(win, ls ? ls : ACS_VLINE);
-    rs = _attr_passthru(win, rs ? rs : ACS_VLINE);
-    ts = _attr_passthru(win, ts ? ts : ACS_HLINE);
-    bs = _attr_passthru(win, bs ? bs : ACS_HLINE);
-    tl = _attr_passthru(win, tl ? tl : ACS_ULCORNER);
-    tr = _attr_passthru(win, tr ? tr : ACS_URCORNER);
-    bl = _attr_passthru(win, bl ? bl : ACS_LLCORNER);
-    br = _attr_passthru(win, br ? br : ACS_LRCORNER);
+    def_val = (doubled_v ? ACS_D_VLINE : ACS_VLINE);
+    ls = _attr_passthru(win, ls ? ls : def_val);
+    rs = _attr_passthru(win, rs ? rs : def_val);
+    def_val = (doubled_h ? ACS_D_HLINE : ACS_HLINE);
+    ts = _attr_passthru(win, ts ? ts : def_val);
+    bs = _attr_passthru(win, bs ? bs : def_val);
+
+    if( doubled_v)
+        def_val = doubled_h ? ACS_D_LRCORNER : ACS_DS_LRCORNER;
+    else
+        def_val = doubled_h ? ACS_SD_LRCORNER : ACS_LRCORNER;
+
+    tl = _attr_passthru(win, tl ? tl : def_val + 2);
+    tr = _attr_passthru(win, tr ? tr : def_val + 1);
+    bl = _attr_passthru(win, bl ? bl : def_val + 3);
+    br = _attr_passthru(win, br ? br : def_val);
 
     for (i = 1; i < xmax; i++)
     {
@@ -170,11 +203,13 @@ int wborder(WINDOW *win, chtype ls, chtype rs, chtype ts, chtype bs,
     win->_y[ymax][0] = bl;
     win->_y[ymax][xmax] = br;
 
-    for (i = 0; i <= ymax; i++)
+    for (i = 1; i < ymax; i++)
     {
-        win->_firstch[i] = 0;
-        win->_lastch[i] = xmax;
+        PDC_mark_cell_as_changed( win, i, 0);
+        PDC_mark_cell_as_changed( win, i, xmax);
     }
+    PDC_set_changed_cells_range( win, 0, 0, xmax);
+    PDC_set_changed_cells_range( win, ymax, 0, xmax);
 
     PDC_sync(win);
 
@@ -203,6 +238,7 @@ int whline(WINDOW *win, chtype ch, int n)
 
     PDC_LOG(("whline() - called\n"));
 
+    assert( win);
     if (!win || n < 1)
         return ERR;
 
@@ -216,11 +252,7 @@ int whline(WINDOW *win, chtype ch, int n)
 
     n = win->_cury;
 
-    if (startpos < win->_firstch[n] || win->_firstch[n] == _NO_CHANGE)
-        win->_firstch[n] = startpos;
-
-    if (endpos > win->_lastch[n])
-        win->_lastch[n] = endpos;
+    PDC_mark_cells_as_changed( win, n, startpos, endpos);
 
     PDC_sync(win);
 
@@ -260,6 +292,7 @@ int wvline(WINDOW *win, chtype ch, int n)
 
     PDC_LOG(("wvline() - called\n"));
 
+    assert( win);
     if (!win || n < 1)
         return ERR;
 
@@ -271,12 +304,7 @@ int wvline(WINDOW *win, chtype ch, int n)
     for (n = win->_cury; n < endpos; n++)
     {
         win->_y[n][x] = ch;
-
-        if (x < win->_firstch[n] || win->_firstch[n] == _NO_CHANGE)
-            win->_firstch[n] = x;
-
-        if (x > win->_lastch[n])
-            win->_lastch[n] = x;
+        PDC_mark_cell_as_changed( win, n, x);
     }
 
     PDC_sync(win);
@@ -345,6 +373,7 @@ int whline_set(WINDOW *win, const cchar_t *wch, int n)
 {
     PDC_LOG(("whline_set() - called\n"));
 
+    assert( wch);
     return wch ? whline(win, *wch, n) : ERR;
 }
 
@@ -379,6 +408,7 @@ int wvline_set(WINDOW *win, const cchar_t *wch, int n)
 {
     PDC_LOG(("wvline_set() - called\n"));
 
+    assert( wch);
     return wch ? wvline(win, *wch, n) : ERR;
 }
 

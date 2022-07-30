@@ -1,6 +1,7 @@
 /* PDCurses */
 
 #include <curspriv.h>
+#include <assert.h>
 
 /*man-start**************************************************************
 
@@ -16,18 +17,18 @@ delch
 
 ### Description
 
-   The character under the cursor in the window is deleted.  All
-   characters to the right on the same line are moved to the left
-   one position and the last character on the line is filled with
-   a blank.  The cursor position does not change (after moving to
-   y, x if coordinates are specified).
+   The character under the cursor in the window is deleted. All
+   characters to the right on the same line are moved to the left one
+   position and the last character on the line is filled with a blank.
+   The cursor position does not change (after moving to y, x if
+   coordinates are specified).
 
 ### Return Value
 
    All functions return OK on success and ERR on error.
 
 ### Portability
-                             X/Open    BSD    SYS V
+                             X/Open  ncurses  NetBSD
     delch                       Y       Y       Y
     wdelch                      Y       Y       Y
     mvdelch                     Y       Y       Y
@@ -44,6 +45,7 @@ int wdelch(WINDOW *win)
 
     PDC_LOG(("wdelch() - called\n"));
 
+    assert( win);
     if (!win)
         return ERR;
 
@@ -58,10 +60,7 @@ int wdelch(WINDOW *win)
 
     win->_y[y][maxx] = win->_bkgd;
 
-    win->_lastch[y] = maxx;
-
-    if ((win->_firstch[y] == _NO_CHANGE) || (win->_firstch[y] > x))
-        win->_firstch[y] = x;
+    PDC_mark_cells_as_changed( win, y, x, maxx);
 
     PDC_sync(win);
 

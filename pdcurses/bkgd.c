@@ -1,6 +1,7 @@
 /* PDCurses */
 
 #include <curspriv.h>
+#include <assert.h>
 
 /*man-start**************************************************************
 
@@ -24,39 +25,42 @@ bkgd
 
 ### Description
 
-   bkgdset() and wbkgdset() manipulate the background of a window.
-   The background is a chtype consisting of any combination of
-   attributes and a character; it is combined with each chtype
-   added or inserted to the window by waddch() or winsch(). Only
-   the attribute part is used to set the background of non-blank
-   characters, while both character and attributes are used for
-   blank positions.
+   bkgdset() and wbkgdset() manipulate the background of a window. The
+   background is a chtype consisting of any combination of attributes
+   and a character; it is combined with each chtype added or inserted to
+   the window by waddch() or winsch(). Only the attribute part is used
+   to set the background of non-blank characters, while both character
+   and attributes are used for blank positions.
 
    bkgd() and wbkgd() not only change the background, but apply it
    immediately to every cell in the window.
 
-   The attributes that are defined with the attrset()/attron() set
-   of functions take precedence over the background attributes if
-   there is a conflict (e.g., different color pairs).
+   wbkgrnd(), wbkgrndset() and wgetbkgrnd() are the "wide-character"
+   versions of these functions, taking a pointer to a cchar_t instead of
+   a chtype. However, in PDCurses, cchar_t and chtype are the same.
+
+   The attributes that are defined with the attrset()/attron() set of
+   functions take precedence over the background attributes if there is
+   a conflict (e.g., different color pairs).
 
 ### Return Value
 
-   bkgd() and wbkgd() return OK, unless the window is NULL, in
-   which case they return ERR.
+   bkgd() and wbkgd() return OK, unless the window is NULL, in which
+   case they return ERR.
 
 ### Portability
-                             X/Open    BSD    SYS V
-    bkgd                        Y       -      4.0
-    bkgdset                     Y       -      4.0
-    getbkgd                     Y
-    wbkgd                       Y       -      4.0
-    wbkgdset                    Y       -      4.0
-    bkgrnd                      Y
-    bkgrndset                   Y
-    getbkgrnd                   Y
-    wbkgrnd                     Y
-    wbkgrndset                  Y
-    wgetbkgrnd                  Y
+                             X/Open  ncurses  NetBSD
+    bkgd                        Y       Y       Y
+    bkgdset                     Y       Y       Y
+    getbkgd                     Y       Y       Y
+    wbkgd                       Y       Y       Y
+    wbkgdset                    Y       Y       Y
+    bkgrnd                      Y       Y       Y
+    bkgrndset                   Y       Y       Y
+    getbkgrnd                   Y       Y       Y
+    wbkgrnd                     Y       Y       Y
+    wbkgrndset                  Y       Y       Y
+    wgetbkgrnd                  Y       Y       Y
 
 **man-end****************************************************************/
 
@@ -69,6 +73,7 @@ int wbkgd(WINDOW *win, chtype ch)
 
     PDC_LOG(("wbkgd() - called\n"));
 
+    assert( win);
     if (!win)
         return ERR;
 
@@ -169,6 +174,7 @@ chtype getbkgd(WINDOW *win)
 {
     PDC_LOG(("getbkgd() - called\n"));
 
+    assert( win);
     return win ? win->_bkgd : (chtype)ERR;
 }
 
@@ -177,6 +183,7 @@ int wbkgrnd(WINDOW *win, const cchar_t *wch)
 {
     PDC_LOG(("wbkgrnd() - called\n"));
 
+    assert( wch);
     return wch ? wbkgd(win, *wch) : ERR;
 }
 
@@ -206,6 +213,8 @@ int wgetbkgrnd(WINDOW *win, cchar_t *wch)
 {
     PDC_LOG(("wgetbkgrnd() - called\n"));
 
+    assert( win);
+    assert( wch);
     if (!win || !wch)
         return ERR;
 

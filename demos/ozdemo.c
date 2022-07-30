@@ -1,16 +1,12 @@
 /*
- *  ozdemo.c   -   A demo program using PDCurses. The program
- *          illustrates the use of colors for text output.
- *
- *  Hacks by jbuhler@cs.washington.edu on 12/29/96
+ *  ozdemo.c           - A demo program using PDCurses. The program
+ *  (formerly newdemo)   illustrates the use of colors for text output.
  */
 
-#include <stdio.h>
 #include <signal.h>
 #include <string.h>
 #include <curses.h>
 #include <stdlib.h>
-#include <assert.h>
 #include <time.h>
 
 int WaitForUser(void);
@@ -22,18 +18,22 @@ void trap(int);
 
 char *AusMap[17] =
 {
-    "                       A ",
-    "           AA         AA ",
-    "    N.T. AAAAA       AAAA ",
-    "     AAAAAAAAAAA  AAAAAAAA ",
-    "   AAAAAAAAAAAAAAAAAAAAAAAAA Qld.",
-    " AAAAAAAAAAAAAAAAAAAAAAAAAAAA ",
-    " AAAAAAAAAAAAAAAAAAAAAAAAAAAAA ",
-    " AAAAAAAAAAAAAAAAAAAAAAAAAAAA ",
-    "   AAAAAAAAAAAAAAAAAAAAAAAAA N.S.W.",
-    "W.A. AAAAAAAAA      AAAAAA Vic.",
-    "       AAA   S.A.     AA",
-    "                       A  Tas.",
+    "                 _,__        .:",
+    "         Darwin <*  /        | \\",
+    "            .-./     |.     :  :,",
+    "           /    |      '-._/     \\_",
+    "          /     |   N.T. | '       \\",
+    "        .'      |        |   Qld.  *: Brisbane",
+    "     .-'        |        |           ;",
+    "     |   W.A.   |----------|         |",
+    "     \\          |          |--------/",
+    "      |         |   S.A.   | N.S.W./",
+    "Perth  *        |__.--._   |-,_   *  Sydney",
+    "        \\     _.'       \\:.|Vic'-,|",
+    "        >__,-'   Adelaide  \\_/*_.-'",
+    "                              Melbourne",
+    "                             :--,",
+    "                        Tas.  '* Hobart",
     ""
 };
 
@@ -63,7 +63,7 @@ int WaitForUser(void)
     nocbreak();     /* Reset the halfdelay() value */
     cbreak();
 
-    return (ch == '\033') ? '\033' : 0;
+    return (ch == '\033') ? (int)ch : 0;
 }
 
 int SubWinTest(WINDOW *win)
@@ -209,30 +209,31 @@ void trap(int sig)
     }
 }
 
+#define INTENTIONALLY_UNUSED_PARAMETER( param) (void)(param)
+
 int main(int argc, char **argv)
 {
     WINDOW *win;
     chtype save[80], ch;
-    int width, height, w, x, y, i, j, seed;
-    const char *versions =
-            " DOS, OS/2, Windows console & GUI, X11, SDL 1/2, VT";
+    time_t seed;
+    const int width = 52, height = 22;
+    int w, x, y, i, j;
+    const char *versions_1 =
+            " DOS, DOSVGA, Linux framebuffer, OS/2, Plan 9,";
+    const char *versions_2 =
+            " SDL 1/2, VT, Windows console & GUI, X11";
     const char *hit_any_key =
-            "       Type a key to continue or ESC to quit       ";
-
-    assert( strlen( versions) == strlen( hit_any_key));
-#ifdef PDCURSES
-#ifdef PDC_VER_MAJOR   /* so far only seen in 4.0+ */
-    PDC_set_resize_limits( 20, 50, 70, 200);
-#endif
-#endif
+            "       Type a key to continue or ESC to quit     ";
 
 #ifdef XCURSES
     Xinitscr(argc, argv);
 #else
+    INTENTIONALLY_UNUSED_PARAMETER( argv);
+    INTENTIONALLY_UNUSED_PARAMETER( argc);
     initscr();
 #endif
-    seed = (int)time((time_t *)0);
-    srand(seed);
+    seed = time((time_t *)0);
+    srand( (unsigned)seed);
 
     start_color();
 # if defined(NCURSES_VERSION) || (defined(PDC_BUILD) && PDC_BUILD > 3000)
@@ -255,9 +256,6 @@ int main(int argc, char **argv)
 
     /* Create a drawing window */
 
-    width  = strlen( versions) + 4;
-    height = 18;
-
     win = newwin(height, width, (LINES - height) / 2, (COLS - width) / 2);
 
     if (win == NULL)
@@ -269,8 +267,6 @@ int main(int argc, char **argv)
 
     for (;;)
     {
-
-
         init_pair(1, COLOR_WHITE, COLOR_BLUE);
         wbkgd(win, COLOR_PAIR(1));
         werase(win);
@@ -298,7 +294,6 @@ int main(int argc, char **argv)
 
             if (getch() != ERR)
                 break;
-            napms( 1);
 
             if (i == 2000)
             {
@@ -329,55 +324,53 @@ int main(int argc, char **argv)
         /* Display Australia map */
 
         wattrset(win, A_BOLD);
-        i = 0;
-
-        while (*AusMap[i])
+        for( i = 0; AusMap[i][0]; i++)
         {
-            mvwaddstr(win, i + 1, 8, AusMap[i]);
+            mvwaddstr(win, i + 1, 3, AusMap[i]);
             wrefresh(win);
             napms(100);
-            ++i;
         }
 
         init_pair(5, COLOR_BLUE, COLOR_WHITE);
         wattrset(win, COLOR_PAIR(5) | A_BLINK);
-        mvwaddstr( win, height - 4, 2, longname( ));
-        mvwaddstr( win, height - 3, 2, curses_version( ));
-        mvwaddstr( win, height - 2, 2, versions);
+        mvwaddstr( win, height - 5, 2, longname( ));
+        mvwaddstr( win, height - 4, 2, curses_version( ));
+        mvwaddstr( win, height - 3, 2, versions_1);
+        mvwaddstr( win, height - 2, 2, versions_2);
         wrefresh(win);
 
         /* Draw running messages */
 
         init_pair(6, COLOR_BLACK, COLOR_WHITE);
-        wattrset(win, COLOR_PAIR(6));
         w = width - 2;
         nodelay(win, TRUE);
-
-        mvwhline(win, height / 2, 1, ' ', w);
 
         for (j = 0; messages[j] != NULL; j++)
         {
             char *message = messages[j];
-            int msg_len = strlen(message);
+            const int msg_len = (int)strlen(message);
             int stop = 0;
-            int xpos, start, count, n;
+            int xpos, start, count;
+            const int msg_line = 8 + j % 3;
 
-            for (n = 0; n <= w + msg_len; n++)
+            wattrset(win, COLOR_PAIR(6));
+            mvwhline(win, msg_line, 1, ' ', w);
+            for (i = 0; i <= w + msg_len; i++)
             {
-                if (n < w)
+                if (i < w)
                 {
-                    xpos = w - n;
+                    xpos = w - i;
                     start = 0;
-                    count = (n > msg_len) ? msg_len : n;
+                    count = (i > msg_len) ? msg_len : i;
                 }
                 else
                 {
                     xpos = 0;
-                    start = n - w;
+                    start = i - w;
                     count = (w > msg_len - start) ? msg_len - start : w;
                 }
 
-                mvwaddnstr(win, height / 2, xpos + 1, message + start, count);
+                mvwaddnstr(win, msg_line, xpos + 1, message + start, count);
                 if (xpos + count < w)
                     waddstr(win, " ");
 
@@ -392,6 +385,10 @@ int main(int argc, char **argv)
 
                 napms(100);
             }
+            wattrset(win, COLOR_PAIR(2));
+            wattrset(win, A_BOLD);
+            mvwhline( win, msg_line, 1, ' ', w);
+            mvwaddstr(win, msg_line, 3, AusMap[msg_line - 1]);
 
             if (stop)
                 break;
@@ -416,9 +413,8 @@ int main(int argc, char **argv)
 
         /* Put a message up; wait for a key */
 
-        i = height - 2;
         wattrset(win, COLOR_PAIR(5));
-        mvwaddstr(win, i, 2, hit_any_key);
+        mvwaddstr(win, 9, 2, hit_any_key);
         wrefresh(win);
 
         if (WaitForUser() == '\033')
@@ -441,7 +437,11 @@ int main(int argc, char **argv)
             break;
     }
 
+    delwin(win);
     endwin();
+#ifdef __PDCURSESMOD__      /* Not really needed,  but ensures Valgrind  */
+    PDC_free_memory_allocations( );      /* says all memory was freed */
+#endif
 
     return 0;
 }

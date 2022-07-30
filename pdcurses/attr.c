@@ -1,6 +1,7 @@
 /* PDCurses */
 
 #include <curspriv.h>
+#include <assert.h>
 
 /*man-start**************************************************************
 
@@ -44,41 +45,64 @@ attr
 
     chtype getattrs(WINDOW *win);
 
+    int underend(void);
+    int wunderend(WINDOW *win);
+    int underscore(void);
+    int wunderscore(WINDOW *win);
+
 ### Description
 
-   These functions manipulate the current attributes and/or colors
-   of the named window.  These attributes can be any combination
-   of A_STANDOUT, A_REVERSE, A_BOLD, A_DIM, A_BLINK, A_UNDERLINE.
+   These functions manipulate the current attributes and/or colors of
+   the named window. These attributes can be any combination of
+   A_STANDOUT, A_REVERSE, A_BOLD, A_DIM, A_BLINK, A_UNDERLINE. These
+   constants are defined in <curses.h> and can be combined with the
+   bitwise-OR operator (|).
 
-   These constants are defined in <curses.h> and can be combined
-   with the bitwise-OR operator (|).
+   The current attributes of a window are applied to all chtypes that
+   are written into the window with waddch(). Attributes are a property
+   of the chtype, and move with the character through any scrolling or
+   insert/delete operations.
 
-   The current attributes of a window are applied to all chtypes
-   that are written into the window with waddch(). Attributes are
-   a property of the chtype, and move with the character through
-   any scrolling or insert/delete operations.
+   wattrset() sets the current attributes of the given window to attrs.
+   attrset() is the stdscr version.
 
-   attrset() sets the current attributes of the given window to
-   attrs. attroff() turns off the named attributes without
-   affecting any other attributes; attron() turns them on.
-   color_set() sets the window color to the value of color_pair.
+   wattroff() turns off the named attributes without affecting any other
+   attributes; wattron() turns them on.
 
-   standout() is the same as attron(A_STANDOUT). standend() is the
-   same as attrset(A_NORMAL); that is, it turns off all attributes.
+   wcolor_set() sets the window color to the value of color_pair.  If
+   opts is non-NULL,  it is treated as a pointer to an integer containing
+   the desired color pair,  and color_pair is ignored (this is an ncurses
+   extension).
 
-   wchgat() sets the attributes of the n symbols starts from current
-   position of the given window.
+   standout() is the same as attron(A_STANDOUT). standend() is the same
+   as attrset(A_NORMAL); that is, it turns off all attributes.
 
-   mvwchgat() moves the cursor to the specified position and sets
-   the attributes of the n symbols starts from current position of
-   the given window.
+   The attr_* and wattr_* functions are intended for use with the WA_*
+   attributes. In PDCurses, these are the same as A_*, and there is no
+   difference in behavior from the chtype-based functions.  If opts is
+   non-NULL,  it is used as a pointer to an integer and the color pair
+   is stored in it (this is an ncurses extension).
+
+   wattr_get() retrieves the attributes and color pair for the specified
+   window.
+
+   wchgat() sets the color pair and attributes for the next n cells on
+   the current line of a given window, without changing the existing
+   text, or alterting the window's attributes. An n of -1 extends the
+   change to the edge of the window. The changes take effect
+   immediately.  If opts is non-NULL,  it is treated as a pointer to
+   an integer containing the desired color pair,  and color_pair is
+   ignored (this is an ncurses extension).
+
+   wunderscore() turns on the A_UNDERLINE attribute; wunderend() turns
+   it off. underscore() and underend() are the stdscr versions.
 
 ### Return Value
 
    All functions return OK on success and ERR on error.
 
 ### Portability
-                             X/Open    BSD    SYS V
+                             X/Open  ncurses  NetBSD
     attroff                     Y       Y       Y
     wattroff                    Y       Y       Y
     attron                      Y       Y       Y
@@ -89,21 +113,25 @@ attr
     wstandend                   Y       Y       Y
     standout                    Y       Y       Y
     wstandout                   Y       Y       Y
-    color_set                   Y
-    wcolor_set                  Y
-    attr_get                    Y
-    wattr_get                   Y
-    attr_on                     Y
-    wattr_on                    Y
-    attr_off                    Y
-    wattr_off                   Y
-    attr_set                    Y
-    wattr_set                   Y
-    chgat                       Y
-    wchgat                      Y
-    mvchgat                     Y
-    mvwchgat                    Y
-    getattrs                    -
+    color_set                   Y       Y       Y
+    wcolor_set                  Y       Y       Y
+    attr_get                    Y       Y       Y
+    wattr_get                   Y       Y       Y
+    attr_on                     Y       Y       Y
+    wattr_on                    Y       Y       Y
+    attr_off                    Y       Y       Y
+    wattr_off                   Y       Y       Y
+    attr_set                    Y       Y       Y
+    wattr_set                   Y       Y       Y
+    chgat                       Y       Y       Y
+    wchgat                      Y       Y       Y
+    mvchgat                     Y       Y       Y
+    mvwchgat                    Y       Y       Y
+    getattrs                    -       Y       Y
+    underend                    -       -       Y
+    wunderend                   -       -       Y
+    underscore                  -       -       Y
+    wunderscore                 -       -       Y
 
 **man-end****************************************************************/
 
@@ -111,6 +139,7 @@ int wattroff(WINDOW *win, chtype attrs)
 {
     PDC_LOG(("wattroff() - called\n"));
 
+    assert( win);
     if (!win)
         return ERR;
 
@@ -132,6 +161,7 @@ int wattron(WINDOW *win, chtype attrs)
 
     PDC_LOG(("wattron() - called\n"));
 
+    assert( win);
     if (!win)
         return ERR;
 
@@ -161,6 +191,7 @@ int wattrset(WINDOW *win, chtype attrs)
 {
     PDC_LOG(("wattrset() - called\n"));
 
+    assert( win);
     if (!win)
         return ERR;
 
@@ -206,17 +237,21 @@ int wstandout(WINDOW *win)
 
 chtype getattrs(WINDOW *win)
 {
+    assert( win);
     return win ? win->_attrs : 0;
 }
 
 int wcolor_set(WINDOW *win, short color_pair, void *opts)
 {
+    const int integer_color_pair = (opts ? *(int *)opts : (int)color_pair);
+
     PDC_LOG(("wcolor_set() - called\n"));
 
+    assert( win);
     if (!win)
         return ERR;
 
-    win->_attrs = (win->_attrs & ~A_COLOR) | COLOR_PAIR(color_pair);
+    win->_attrs = (win->_attrs & ~A_COLOR) | COLOR_PAIR(integer_color_pair);
 
     return OK;
 }
@@ -232,6 +267,7 @@ int wattr_get(WINDOW *win, attr_t *attrs, short *color_pair, void *opts)
 {
     PDC_LOG(("wattr_get() - called\n"));
 
+    assert( win);
     if (!win)
         return ERR;
 
@@ -240,6 +276,8 @@ int wattr_get(WINDOW *win, attr_t *attrs, short *color_pair, void *opts)
 
     if (color_pair)
         *color_pair = (short)PAIR_NUMBER(win->_attrs);
+    if( opts)
+        *(int *)opts = (int)PAIR_NUMBER( win->_attrs);
 
     return OK;
 }
@@ -255,6 +293,8 @@ int wattr_off(WINDOW *win, attr_t attrs, void *opts)
 {
     PDC_LOG(("wattr_off() - called\n"));
 
+    INTENTIONALLY_UNUSED_PARAMETER( opts);
+    assert( !opts);
     return wattroff(win, attrs);
 }
 
@@ -262,6 +302,8 @@ int attr_off(attr_t attrs, void *opts)
 {
     PDC_LOG(("attr_off() - called\n"));
 
+    INTENTIONALLY_UNUSED_PARAMETER( opts);
+    assert( !opts);
     return wattroff(stdscr, attrs);
 }
 
@@ -269,6 +311,8 @@ int wattr_on(WINDOW *win, attr_t attrs, void *opts)
 {
     PDC_LOG(("wattr_off() - called\n"));
 
+    if( opts)
+        attrs = (attrs & ~A_COLOR) | COLOR_PAIR( *(int *)opts);
     return wattron(win, attrs);
 }
 
@@ -276,17 +320,20 @@ int attr_on(attr_t attrs, void *opts)
 {
     PDC_LOG(("attr_on() - called\n"));
 
-    return wattron(stdscr, attrs);
+    return wattr_on(stdscr, attrs, opts);
 }
 
 int wattr_set(WINDOW *win, attr_t attrs, short color_pair, void *opts)
 {
+    const int integer_color_pair = (opts ? *(int *)opts : (int)color_pair);
+
     PDC_LOG(("wattr_set() - called\n"));
 
+    assert( win);
     if (!win)
         return ERR;
 
-    win->_attrs = (attrs & (A_ATTRIBUTES & ~A_COLOR)) | COLOR_PAIR(color_pair);
+    win->_attrs = (attrs & (A_ATTRIBUTES & ~A_COLOR)) | COLOR_PAIR(integer_color_pair);
 
     return OK;
 }
@@ -302,13 +349,15 @@ int wchgat(WINDOW *win, int n, attr_t attr, short color, const void *opts)
 {
     chtype *dest, newattr;
     int startpos, endpos;
+    const int integer_color_pair = (opts ? *(int *)opts : (int)color);
 
     PDC_LOG(("wchgat() - called\n"));
 
+    assert( win);
     if (!win)
         return ERR;
 
-    newattr = (attr & A_ATTRIBUTES) | COLOR_PAIR(color);
+    newattr = (attr & A_ATTRIBUTES) | COLOR_PAIR(integer_color_pair);
 
     startpos = win->_curx;
     endpos = ((n < 0) ? win->_maxx : min(startpos + n, win->_maxx)) - 1;
@@ -317,13 +366,7 @@ int wchgat(WINDOW *win, int n, attr_t attr, short color, const void *opts)
     for (n = startpos; n <= endpos; n++)
         dest[n] = (dest[n] & A_CHARTEXT) | newattr;
 
-    n = win->_cury;
-
-    if (startpos < win->_firstch[n] || win->_firstch[n] == _NO_CHANGE)
-        win->_firstch[n] = startpos;
-
-    if (endpos > win->_lastch[n])
-        win->_lastch[n] = endpos;
+    PDC_mark_cells_as_changed( win, win->_cury, startpos, endpos);
 
     PDC_sync(win);
 
@@ -356,4 +399,32 @@ int mvwchgat(WINDOW *win, int y, int x, int n, attr_t attr, short color,
         return ERR;
 
     return wchgat(win, n, attr, color, opts);
+}
+
+int underend(void)
+{
+    PDC_LOG(("underend() - called\n"));
+
+    return wattroff(stdscr, A_UNDERLINE);
+}
+
+int wunderend(WINDOW *win)
+{
+    PDC_LOG(("wunderend() - called\n"));
+
+    return wattroff(win, A_UNDERLINE);
+}
+
+int underscore(void)
+{
+    PDC_LOG(("underscore() - called\n"));
+
+    return wattron(stdscr, A_UNDERLINE);
+}
+
+int wunderscore(WINDOW *win)
+{
+    PDC_LOG(("wunderscore() - called\n"));
+
+    return wattron(win, A_UNDERLINE);
 }

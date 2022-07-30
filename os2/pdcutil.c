@@ -1,6 +1,7 @@
-/* Public Domain Curses */
+/* PDCurses */
 
 #include "pdcos2.h"
+#include "time.h"
 
 #if defined(OS2) && !defined(__EMX__)
 APIRET APIENTRY DosSleep(ULONG ulTime);
@@ -10,22 +11,36 @@ void PDC_beep(void)
 {
     PDC_LOG(("PDC_beep() - called\n"));
 
-#ifdef EMXVIDEO
-    putchar('\007');
-#else
     DosBeep(1380, 100);
-#endif
+}
+
+static ULONG _PDC_ms_count(void)
+{
+    const ULONG now = (ULONG)clock( );
+    const ULONG n_seconds = now / (ULONG)CLOCKS_PER_SEC;
+    const ULONG fraction  = now % (ULONG)CLOCKS_PER_SEC;
+
+    return( n_seconds * 1000UL + fraction * 1000UL / (ULONG)CLOCKS_PER_SEC);
 }
 
 void PDC_napms(int ms)
 {
+    static ULONG _last_blink_ms = (ULONG)0;
+    const ULONG blink_interval_ms = 500;   /* blink twice a second */
+
     PDC_LOG(("PDC_napms() - called: ms=%d\n", ms));
 
-#ifdef __EMX__
-    _sleep2(ms);
-#else
+    if( SP->termattrs & A_BLINK)
+    {
+        const ULONG curr_ms = _PDC_ms_count( );
+
+        if( curr_ms < _last_blink_ms || curr_ms >= _last_blink_ms + blink_interval_ms)
+        {
+            PDC_blink_text();
+            _last_blink_ms = curr_ms;
+        }
+    }
     DosSleep(ms);
-#endif
 }
 
 const char *PDC_sysname(void)
@@ -33,20 +48,4 @@ const char *PDC_sysname(void)
     return "OS/2";
 }
 
-PDCEX PDC_version_info PDC_version = { PDC_PORT_OS2,
-          PDC_VER_MAJOR, PDC_VER_MINOR, PDC_VER_CHANGE,
-          sizeof( chtype),
-               /* note that thus far,  'wide' and 'UTF8' versions exist */
-               /* only for SDL2, X11,  Win32,  and Win32a;  elsewhere, */
-               /* these will be FALSE */
-#ifdef PDC_WIDE
-          TRUE,
-#else
-          FALSE,
-#endif
-#ifdef PDC_FORCE_UTF8
-          TRUE,
-#else
-          FALSE,
-#endif
-          };
+enum PDC_port PDC_port_val = PDC_PORT_OS2;
