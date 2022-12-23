@@ -1116,7 +1116,7 @@ static int keep_size_within_bounds( int *lines, int *cols)
 }
 
 INLINE int get_default_sizes_from_registry( int *n_cols, int *n_rows,
-                                     int *xloc, int *yloc)
+                                     int *xloc, int *yloc, int *menu_shown)
 {
     TCHAR data[100];
     DWORD size_out = sizeof( data);
@@ -1140,7 +1140,7 @@ INLINE int get_default_sizes_from_registry( int *n_cols, int *n_rows,
 
             my_stscanf( data, _T( "%dx%d,%d,%d,%d,%d;%d,%d,%d,%d:%n"),
                              &x, &y, &PDC_font_size,
-                             xloc, yloc, &menu_shown,
+                             xloc, yloc, menu_shown,
                              &min_lines, &max_lines,
                              &min_cols, &max_cols,
                              &bytes_read);
@@ -2130,7 +2130,7 @@ INLINE int set_up_window( void)
     }
 
     get_default_sizes_from_registry( &n_default_columns, &n_default_rows,
-                     &xloc, &yloc);
+                     &xloc, &yloc, &menu_shown);
 
     if( ttytype[1])
         PDC_set_resize_limits( (unsigned char)ttytype[0],
