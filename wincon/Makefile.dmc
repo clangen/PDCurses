@@ -12,6 +12,7 @@ PDCURSES_CURSPRIV_H	= $(PDCURSES_SRCDIR)\curspriv.h
 PDCURSES_HEADERS	= $(PDCURSES_CURSES_H) $(PDCURSES_CURSPRIV_H)
 
 PANEL_HEADER	= $(PDCURSES_SRCDIR)\panel.h
+TERM_HEADER	= $(PDCURSES_SRCDIR)\term.h
 
 srcdir		= $(PDCURSES_SRCDIR)\pdcurses
 osdir		= $(PDCURSES_SRCDIR)\wincon
@@ -32,8 +33,9 @@ LIBCURSES	= pdcurses.lib
 
 BUILD		= $(CC) $(CFLAGS) $(CPPFLAGS)
 
-DEMOS		= testcurs.exe ozdemo.exe             xmas.exe tuidemo.exe \
-firework.exe ptest.exe rain.exe worm.exe
+DEMOS      =  calendar.exe firework.exe init_col.exe mbrot.exe \
+newtest.exe ozdemo.exe picsview.exe ptest.exe rain.exe speed.exe \
+testcurs.exe test_pan.exe tuidemo.exe widetest.exe worm.exe xmas.exe
 
 all:    $(LIBCURSES) $(DEMOS)
 
@@ -49,20 +51,22 @@ border.obj clear.obj color.obj delch.obj deleteln.obj getch.obj \
 getstr.obj getyx.obj inch.obj inchstr.obj initscr.obj inopts.obj \
 insch.obj insstr.obj instr.obj kernel.obj keyname.obj mouse.obj move.obj \
 outopts.obj overlay.obj pad.obj panel.obj printw.obj refresh.obj \
-scanw.obj scr_dump.obj scroll.obj slk.obj termattr.obj \
+scanw.obj scr_dump.obj scroll.obj slk.obj termattr.obj terminfo.obj \
 touch.obj util.obj window.obj debug.obj
 
 PDCOBJS = pdcclip.obj pdcdisp.obj pdcgetsc.obj pdckbd.obj pdcscrn.obj \
 pdcsetsc.obj pdcutil.obj
 
-DEMOOBJS = testcurs.obj ozdemo.obj newtest.obj xmas.obj tuidemo.obj tui.obj \
-firework.obj ptest.obj rain.obj worm.obj
+DEMOOBS    =  calendar.obj firework.obj init_col.obj mbrot.obj \
+newtest.obj ozdemo.obj picsview.obj ptest.obj rain.obj speed.obj \
+testcurs.obj test_pan.obj tuidemo.obj widetest.obj worm.obj xmas.obj tui.obj
 
 LIBS = winmm.lib
 
 $(LIBOBJS) $(PDCOBJS) : $(PDCURSES_HEADERS)
 $(PDCOBJS) : $(PDCURSES_WIN_H)
 panel.obj ptest.obj: $(PANEL_HEADER)
+term.obj : $(TERM_HEADER)
 
 $(DEMOOBJS) : $(PDCURSES_CURSES_H)
 $(DEMOS) : $(LIBCURSES)
@@ -183,6 +187,9 @@ slk.obj: $(srcdir)\slk.c
 termattr.obj: $(srcdir)\termattr.c
 	$(SRCBUILD)
 
+terminfo.obj: $(srcdir)\terminfo.c
+	$(SRCBUILD)
+
 touch.obj: $(srcdir)\touch.c
 	$(SRCBUILD)
 
@@ -216,13 +223,25 @@ pdcsetsc.obj: $(osdir)\pdcsetsc.c
 pdcutil.obj: $(osdir)\pdcutil.c
 	$(OSBUILD)
 
+calendar.exe:   $(demodir)\calendar.c
+	$(DEMOBUILD)
+
 firework.exe:   $(demodir)\firework.c
 	$(DEMOBUILD)
 
-ozdemo.exe:    $(demodir)\ozdemo.c
+init_col.exe:   $(demodir)\init_col.c
+	$(DEMOBUILD)
+
+mbrot.exe:      $(demodir)\mbrot.c
 	$(DEMOBUILD)
 
 newtest.exe:    $(demodir)\newtest.c
+	$(DEMOBUILD)
+
+ozdemo.exe:     $(demodir)\ozdemo.c
+	$(DEMOBUILD)
+
+picsview.exe:   $(demodir)\picsview.c
 	$(DEMOBUILD)
 
 ptest.exe:      $(demodir)\ptest.c
@@ -231,7 +250,13 @@ ptest.exe:      $(demodir)\ptest.c
 rain.exe:       $(demodir)\rain.c
 	$(DEMOBUILD)
 
+speed.exe:      $(demodir)\speed.c
+	$(DEMOBUILD)
+
 testcurs.exe:   $(demodir)\testcurs.c
+	$(DEMOBUILD) advapi32.lib
+
+test_pan.exe:   $(demodir)\test_pan.c
 	$(DEMOBUILD) advapi32.lib
 
 tuidemo.exe:    tuidemo.obj tui.obj

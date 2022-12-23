@@ -150,7 +150,11 @@ int PDC_resize_screen(int nlines, int ncols)
       {
       char tbuff[50];
 
+#ifdef HAVE_SNPRINTF
       snprintf( tbuff, sizeof( tbuff), "\033[8;%d;%dt", nlines, ncols);
+#else
+      sprintf( tbuff, "\033[8;%d;%dt", nlines, ncols);
+#endif
       PDC_puts_to_stdout( tbuff);
       PDC_rows = nlines;
       PDC_cols = ncols;
@@ -383,8 +387,4 @@ int PDC_init_color( int color, int red, int green, int blue)
     if( !PDC_set_palette_entry( color, new_rgb))
         curscr->_clear = TRUE;
     return OK;
-}
-
-void PDC_free_platform_dependent_memory( void)
-{
 }

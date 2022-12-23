@@ -180,6 +180,7 @@ void PDC_scr_free(void)
 {
     extern XIM pdc_xim;
 
+    PDC_free_palette( );
     if (icon_pixmap)
     {
         XFreePixmap(XCURSESDISPLAY, icon_pixmap);
@@ -638,8 +639,11 @@ int PDC_scr_open(void)
     wm_atom[0] = XInternAtom(XtDisplay(pdc_toplevel), "WM_DELETE_WINDOW",
                              False);
 
+    /* Make sure we tell X that we'd like to take focus */
+    wm_atom[1] = XInternAtom(XtDisplay(pdc_toplevel), "WM_TAKE_FOCUS",
+                             False);
     XSetWMProtocols(XtDisplay(pdc_toplevel), XtWindow(pdc_toplevel),
-                    wm_atom, 1);
+                    wm_atom, 2);
 
     /* Create the Graphics Context for drawing. This MUST be done AFTER
        the associated widget has been realized. */
@@ -688,6 +692,16 @@ int PDC_scr_open(void)
     SP->orig_attr = FALSE;
 
     atexit(PDC_scr_free);
+
+    XSync(XtDisplay(pdc_toplevel), True);
+    SP->resized = pdc_resize_now = FALSE;
+
+    /* Make sure that we say that we're allowed to have input focus.
+       Otherwise some window managers will refuse to focus the window. */
+    XWMHints* hints = XGetWMHints(XtDisplay(pdc_toplevel), XtWindow(pdc_toplevel));
+    hints->input=true;
+    XSetWMHints(XtDisplay(pdc_toplevel), XtWindow(pdc_toplevel), hints);
+    XFree(hints);
 
     return OK;
 }
@@ -826,8 +840,4 @@ void PDC_set_resize_limits( const int new_min_lines, const int new_max_lines,
     PDC_max_lines = max( new_max_lines, PDC_min_lines);
     PDC_min_cols = max( new_min_cols, 2);
     PDC_max_cols = max( new_max_cols, PDC_min_cols);
-}
-
-void PDC_free_platform_dependent_memory( void)
-{
 }

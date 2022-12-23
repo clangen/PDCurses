@@ -7,7 +7,7 @@ WINDOW *w4, *w5;
 
 long nap_msec = 1;
 
-char *mod[] =
+const char *mod[] =
 {
     "test ", "TEST ", "(**) ", "*()* ", "<--> ", "LAST "
 };
@@ -93,7 +93,7 @@ PANEL *mkpanel(int rows, int cols, int tly, int tlx)
 
 void rmpanel(PANEL *pan)
 {
-    WINDOW *win = pan->win;
+    WINDOW *win = panel_window( pan);
 
     del_panel(pan);
     delwin(win);
@@ -101,8 +101,8 @@ void rmpanel(PANEL *pan)
 
 void fill_panel(PANEL *pan)
 {
-    WINDOW *win = pan->win;
-    char num = *((char *)pan->user + 1);
+    WINDOW *win = panel_window( pan);
+    char num = *((char *)panel_userptr( pan) + 1);
     int y, x, maxy, maxx;
 
     box(win, 0, 0);
@@ -116,6 +116,7 @@ void fill_panel(PANEL *pan)
 
 int main(int argc, char **argv)
 {
+    SCREEN *screen_pointer;
     int itmp, y;
 
     if (argc > 1 && atol(argv[1]))
@@ -123,8 +124,9 @@ int main(int argc, char **argv)
 
 #ifdef XCURSES
     Xinitscr(argc, argv);
+    screen_pointer = SP;
 #else
-    initscr();
+    screen_pointer = newterm(NULL, stdout, stdin);
 #endif
 
     keypad(stdscr, TRUE);
@@ -297,6 +299,11 @@ int main(int argc, char **argv)
         pflush();
         wait_a_while(nap_msec);
 
+        saywhat("d3; ");
+        rmpanel(p3);
+        pflush();
+        wait_a_while(nap_msec);
+
         if (nap_msec == 1)
             break;
 
@@ -304,6 +311,7 @@ int main(int argc, char **argv)
     }
 
     endwin();
+    delscreen( screen_pointer);          /* says all memory was freed */
 
     return 0;
 }   /* end of main */

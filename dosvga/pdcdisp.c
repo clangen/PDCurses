@@ -2,7 +2,11 @@
 
 #include "pdcdos.h"
 
+#ifdef PDC_WIDE
 #define USE_UNICODE_ACS_CHARS 1
+#else
+#define USE_UNICODE_ACS_CHARS 0
+#endif
 
 #include "../common/acs_defs.h"
 
@@ -544,7 +548,7 @@ static unsigned long _get_colors(chtype glyph)
 void PDC_private_cursor_off(void)
 {
     /* This gets called before atrtab is set up; avoid a null dereference */
-    if (!SP || !SP->atrtab)
+    if (!SP || !SP->opaque || !SP->opaque->pairs)
         return;
 
     PDC_state.cursor_visible = FALSE;

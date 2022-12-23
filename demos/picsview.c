@@ -2,6 +2,8 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "../demos/snprintf.c"
+
 #define PDC_NCMOUSE
 
 #include "curses.h"
@@ -490,7 +492,7 @@ int main( const int argc, const char *argv[])
    free( pixels);
    endwin();
 #ifdef __PDCURSESMOD__      /* Not really needed,  but ensures Valgrind  */
-    PDC_free_memory_allocations( );      /* says all memory was freed */
+   delscreen( SP);                       /* says all memory was freed */
 #endif
    return( 0);
 }

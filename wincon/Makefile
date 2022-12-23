@@ -1,7 +1,7 @@
 # GNU MAKE Makefile for PDCurses library - WIN32 MinGW GCC
 #
 # Usage: [g]make [-f path\Makefile] [DEBUG=Y] [DLL=Y] [WIDE=Y] [UTF8=Y]
-#        [INFOEX=N] [target]
+#        [INFOEX=N] [LIBNAME=(name)] [DLLNAME=(name)] [target]
 #
 # where target can be any of:
 # [all|demos|pdcurses.a|testcurs.exe...]
@@ -74,7 +74,7 @@ ifeq ($(DEBUG),Y)
 	CFLAGS  += -g -DPDCDEBUG
 	LDFLAGS = -g
 else
-	CFLAGS  += -O4
+	CFLAGS  += -O3
 	LDFLAGS =
 endif
 
@@ -97,12 +97,14 @@ ifeq ($(INFOEX),N)
 endif
 
 LINK	   = $(CC)
+LIBNAME = pdcurses
+DLLNAME = pdcurses
 
 ifeq ($(DLL),Y)
 	CFLAGS += -DPDC_DLL_BUILD
 	LIBEXE = $(CC)
-	LIBFLAGS = -Wl,--out-implib,pdcurses.a -shared -o
-	LIBCURSES = pdcurses.dll
+	LIBFLAGS = -Wl,--out-implib,$(LIBNAME).a -shared -o
+	LIBCURSES = $(DLLNAME).dll
 	LIBDEPS = $(LIBOBJS) $(PDCOBJS)
 	LIBSADDED = -lwinmm
 	EXELIBS =
@@ -114,7 +116,7 @@ ifeq ($(PREFIX),)
 else
 	LIBFLAGS = rv
 endif
-	LIBCURSES = pdcurses.a
+	LIBCURSES = $(LIBNAME).a
 	LIBDEPS = $(LIBOBJS) $(PDCOBJS)
 	LIBSADDED =
 	EXELIBS = -lwinmm
@@ -140,7 +142,7 @@ endif
 
 $(LIBCURSES) : $(LIBDEPS)
 	$(LIBEXE) $(LIBFLAGS) $@ $? $(LIBSADDED)
-	$(CP) pdcurses.a panel.a
+	$(CP) $(LIBNAME).a panel.a
 
 $(LIBOBJS) $(PDCOBJS) : $(PDCURSES_HEADERS)
 $(PDCOBJS) : $(PDCURSES_WIN_H)
@@ -166,5 +168,14 @@ tui.o: $(demodir)/tui.c $(demodir)/tui.h $(PDCURSES_CURSES_H)
 
 tuidemo.o: $(demodir)/tuidemo.c $(PDCURSES_CURSES_H)
 	$(CC) -c $(CFLAGS) -I$(demodir) -o$@ $<
+
+configure :
+	$(CC) $(CFLAGS) -o config_curses$(E) $(common)/config_curses.c
+ifdef ON_WINDOWS
+	config_curses$(E) -v -d.. $(CFLAGS)
+else
+	wine config_curses$(E) -v -d.. $(CFLAGS)
+endif
+	rm config_curses$(E)
 
 include $(PDCURSES_SRCDIR)/demos/nctests.mif

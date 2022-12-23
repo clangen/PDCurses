@@ -1,3 +1,99 @@
+PDCursesMod 4.3.5 - 2022 November 27
+====================================
+
+Major new features
+------------------
+
+- WinGUI is again single-threaded,  resulting in considerably simpler
+  code and fixing some resizing issues.  See pull request #240.
+  6962ab6e9d
+
+Minor new features
+------------------
+
+- Framebuffer port can now use either the (deprecated) Linux framebuffer
+  system or the DRM (Direct Rendering Manager) system.  DRM is not
+  supported on some older systems and the Linux framebuffer is not
+  supported on newer ones.  DRM also can be used with *BSD;  the Linux
+  framebuffer really is a Linux-only solution.  e9bc09c083
+
+- GNU Makefiles for VT and framebuffer ports work out of the box on
+  FreeBSD.  2b5f0036fe
+
+- Much revision internal to the PDCursesMod library (no effect as far
+  as users of the library are concerned) to move static variables into
+  the SCREEN structure,  in a way that preserves binary compatibility
+  and keeps those variables opaque outside the library.  0d5e4dc5b4
+  3e167172ff  7449df5369
+
+- delwin() now returns ERR if you attempt to delete a window with
+  active subwindows,  or a window that wasn't allocated by PDCursesMod
+  or which has already been freed.  c643c0da95  3b14813dbb
+
+- delscreen() deletes all windows associated with a SCREEN.  26e473c60b
+
+- Made the PANEL and PANELOBS structures opaque.  f55e55a0fb  78039d10c3
+
+- Checking for key hits is much,  much faster on most platforms.
+  6612df5af6
+
+- Added ncurses extensions for opaque WINDOW structs,  from Markus Uhlin.
+  7bb822b2a4  22fecc1cf6
+
+- You can specify the library name during a GCC build with LIBNAME=(name)
+  and the shared library name with DLLNAME=(name).  Support is,  as yet,
+  incomplete,  but it should be possible to expand this to MSVC and
+  OpenWATCOM builds.   44e5aa323e
+
+- 'ptest' and 'speed' demos free all memory on exit.  This helps (slightly)
+  when testing with Valgrind.
+
+- On gcc and mingw builds for WinCon, WinGUI,  and VT,  one can run 'make
+  configure (options)' to revise 'curses.h' to use the specified options.
+  This may be extended to other compilers and platforms.  fe39e244d2
+  9c0f475287
+
+Bug fixes
+---------
+
+- In some situations,  cursor movement/changes were not immediately made
+  on VT and SDL2.  a805ec2b15  18abe3dbd5
+
+- Keyboard entry in SDL2 was defective for some numeric keypad hits,  and
+  shift-F(n) keys gave no response.  d87b7bd917  8a41f2ed57
+
+- PDC_free_memory_allocations() (see below) was unnecessary;  if we follow
+  the specifications for delscreen(),  as we now do,  all that memory
+  gets freed in the natural course of things.  0223039ec0  60138ca8ec
+
+- SDL2 had problems finding the default TrueType font on Rocky Linux 9
+  builds.  Mark Hessling added a bit of code so that a secondary default
+  path is specified;  if one path fails,  we try the other.  1e4bcc9676
+
+- SDL1 was similarly updated;  it also got some better default locations
+  for TrueType fonts on Windows and Apple,  borrowed from fixes that had
+  already been done for SDL2.  9cf041e835
+
+- Both SDL1 and SDL2 failed to free some memory when delscreen(SP) was
+  called.  The result was that you couldn't cleanly shut down curses
+  completely and restart it.  c62edf7752
+
+- Fixed some problems with Digital Mars compiles and added missing demos.
+  e798d30e63  4781b742b5  e39528f9e8  5efbea3676  aba598f492
+
+- wgetnstr() was broken on platforms where wint_t != wchar_t.  54bc1a16fb
+
+- AltCharSet display was broken in DOSVGA 8-bit character builds. e00e33650b
+
+- getch() and wget_wch() could return erroneous values in WinCon for values
+  greater than 127.  e54d03fc80  e86d9c3568
+
+- Made PDC_set_default_colors() an internal function.  Exposing it basically
+  amounted to a bug.  f1786064ee acd143144f
+
+- In SDLn in fullscreen mode,  mouse events near the bottom or right-hand
+  sides of the screen could trigger segfaults.   03eb51cefc
+
 PDCursesMod 4.3.4 - 2022 July 29
 ================================
 
@@ -10,6 +106,7 @@ Minor new features
 
 - You can free remaining internal buffers by calling the new
   PDC_free_memory_allocations() function.  8d10534143  2259f29d5f
+  (Note that this has been reverted.)
 
 - On Linux,  we use the system-provided wcwidth() instead of our own.
   Aside from avoiding redundant code,  this may help in non-Unicode
@@ -302,7 +399,9 @@ Minor new features
 
 -  Added a PDC_set_default_colors( ) function.  Some platforms expect
    particular background/foreground colors by default.  This lets you set
-   those colors.   b642c91279
+   those colors.  (Note that this should have been,  and was made,  an
+   internal function;  programs should use 'assume_default_colors()'.)
+   b642c91279
 
 -  In Windows,  one can use Ctrl-C/Ctrl-V to copy/paste,  instead of
    Ctrl-Shift-C/Ctrl-Shift-V.   9f487d4fea

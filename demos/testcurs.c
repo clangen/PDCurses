@@ -109,6 +109,7 @@ COMMAND command[MAX_OPTIONS] =
 
 int width, height;
 static bool report_mouse_movement = FALSE;
+static SCREEN *screen_pointer;
 
 int main(int argc, char *argv[])
 {
@@ -246,10 +247,8 @@ int main(int argc, char *argv[])
 
     delwin(win);
     endwin();
-#ifdef __PDCURSESMOD__      /* Not really needed,  but ensures Valgrind  */
-    PDC_free_memory_allocations( );      /* says all memory was freed */
-#endif
-
+                            /* Not really needed,  but ensures Valgrind  */
+    delscreen( screen_pointer);          /* says all memory was freed */
     return 0;
 }
 
@@ -275,10 +274,11 @@ int initTest(WINDOW **win, int argc, char *argv[])
 {
 #ifdef XCURSES
     Xinitscr(argc, argv);
+    screen_pointer = SP;
 #else
     INTENTIONALLY_UNUSED_PARAMETER( argv);
     INTENTIONALLY_UNUSED_PARAMETER( argc);
-    initscr();
+    screen_pointer = newterm(NULL, stdout, stdin);
 #endif
 #ifdef A_COLOR
     if (has_colors())
@@ -1740,7 +1740,8 @@ void display_menu(int old_option, int new_option)
         int i;
 
         attrset(A_BOLD);
-        mvprintw(tmarg - 3, lmarg - 5, "%s Test Program", longname( ));
+        mvprintw( tmarg - 3, (COLS - strlen( longname( ))) / 2 - 6,
+                            "%s Test Program", longname( ));
         attrset(A_NORMAL);
 
         for (i = 0; i < MAX_OPTIONS; i++)

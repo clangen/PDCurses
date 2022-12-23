@@ -723,7 +723,6 @@ color
     int free_pair( int pair);
     int use_default_colors(void);
     void reset_color_pairs(void);
-    void PDC_set_default_colors( const int fg_idx, const int bg_idx);
 
     int PDC_set_line_color(short color);
 
@@ -796,11 +795,7 @@ color
    the terminal;  SDLn defines them to be the colors of the background
    image,  if any.  On all other platforms,  and on SDLn if there's no
    background images,  the default background is black;  the default
-   foreground is white.  PDC_set_default_colors(),  a PDCursesMod-
-   specific function,  allows you to override this and define default
-   colors before calling initscr().  This was added for the Plan9
-   platform,  where the desired default is black text on a white
-   background,  but it can be used with any platform.
+   foreground is white.
 
    PDC_set_line_color() is used to set the color, globally, for the
    color of the lines drawn for the attributes: A_UNDERLINE, A_LEFT and
@@ -1356,7 +1351,6 @@ initscr
     SCREEN *newterm(const char *type, FILE *outfd, FILE *infd);
     SCREEN *set_term(SCREEN *new);
     void delscreen(SCREEN *sp);
-    void PDC_free_memory_allocations( void);
 
     int resize_term(int nlines, int ncols);
     bool is_termresized(void);
@@ -1389,15 +1383,6 @@ initscr
    since it's not freed by endwin(). This function is usually not
    needed. In PDCurses, the parameter must be the value of SP, and
    delscreen() sets SP to NULL.
-
-   PDC_free_memory_allocations() frees all memory allocated by PDCurses,
-   including SP and any platform-dependent memory.  It should be called
-   after endwin(),  not instead of it.  It need not be called,  because
-   remaining memory will be freed at exit;  but it can help in diagnosing
-   memory leak issues by ruling out any from PDCurses.
-
-   Note that SDLn and X11 have known memory leaks within their libraries,
-   which appear to be effectively unfixable.
 
    set_term() does nothing meaningful in PDCurses, but is included for
    compatibility with other curses implementations.
@@ -1472,6 +1457,7 @@ inopts
     void qiflush(void);
     void timeout(int delay);
     void wtimeout(WINDOW *win, int delay);
+    int wgetdelay(const WINDOW *win);
     int typeahead(int fildes);
     bool PDC_getcbreak(void);
     bool PDC_getecho(void);
@@ -1480,6 +1466,8 @@ inopts
     int nocrmode(void);
 
     bool is_keypad(const WINDOW *win);
+    bool is_nodelay(const WINDOW *win);
+    bool is_notimeout(const WINDOW *win);
 
 ### Description
 
@@ -1533,6 +1521,8 @@ inopts
    delay is given; i.e., 1-99 will wait 50ms, 100-149 will wait 100ms,
    etc.
 
+   wgetdelay() returns the delay timeout as set in wtimeout().
+
    intrflush(), notimeout(), noqiflush(), qiflush() and typeahead() do
    nothing in PDCurses, but are included for compatibility with other
    curses implementations.
@@ -1542,10 +1532,16 @@ inopts
 
    is_keypad() reports whether the specified window is in keypad mode.
 
+   is_nodelay() reports whether the specified window is in nodelay mode.
+
 ### Return Value
 
-   All functions except is_keypad() and the void functions return OK on
-   success and ERR on error.
+   All functions that return integers return OK on success and ERR on
+   error.  is_keypad() and is_nodelay() return TRUE or FALSE.
+
+   is_notimeout() is provided for compatibility with other curses
+   implementations.  It has no real meaning in PDCursesMod and will
+   always return FALSE.
 
 ### Portability
                              X/Open  ncurses  NetBSD
@@ -1569,10 +1565,13 @@ inopts
     qiflush                     Y       Y       Y
     timeout                     Y       Y       Y
     wtimeout                    Y       Y       Y
+    wgetdelay                   -       Y       -
     typeahead                   Y       Y       Y
     crmode                      Y       Y       Y
     nocrmode                    Y       Y       Y
     is_keypad                   -       Y       Y
+    is_nodelay                  -       Y       -
+    is_notimeout                -       Y       -
 
 
 
@@ -2066,11 +2065,17 @@ outopts
     int leaveok(WINDOW *win, bool bf);
     int setscrreg(int top, int bot);
     int wsetscrreg(WINDOW *win, int top, int bot);
+    int wgetscrreg(const WINDOW *win, int *top, int *bot);
     int scrollok(WINDOW *win, bool bf);
 
     int raw_output(bool bf);
 
+    bool is_cleared(const WINDOW *win);
+    bool is_idlok(const WINDOW *win);
+    bool is_idcok(const WINDOW *win);
+    bool is_immedok(const WINDOW *win);
     bool is_leaveok(const WINDOW *win);
+    bool is_scrollok(const WINDOW *win);
 
 ### Description
 
@@ -2092,19 +2097,35 @@ outopts
    will cause all lines in the scrolling region to scroll up one line.
    setscrreg() is the stdscr version.
 
-   idlok() and idcok() do nothing in PDCurses, but are provided for
-   compatibility with other curses implementations.
+   wgetscrreg() gets the top and bottom margins as set in wsetscrreg().
+
+   idlok(), idcok(), is_idlok() and is_idcok() do nothing in PDCursesMod,
+   but are provided for compatibility with other curses implementations.
 
    raw_output() enables the output of raw characters using the standard
    *add* and *ins* curses functions (that is, it disables translation of
    control characters).
 
+   is_cleared() reports whether the specified window causes clear at next
+   refresh.
+
+   is_immedok() reports whether the specified window is in immedok mode.
+
    is_leaveok() reports whether the specified window is in leaveok mode.
+
+   is_scrollok() reports whether the specified window allows scrolling.
 
 ### Return Value
 
-   All functions except is_leaveok() return OK on success and ERR on
+   All functions returning integers return OK on success and ERR on
    error.
+
+   is_cleared(), is_immedok(), is_leaveok() and is_scrollok() are
+   booleans and return TRUE or FALSE.
+
+   is_idlok() and is_idcok() are provided for compatibility with other
+   curses implementations.  They have no real meaning in PDCursesMod and
+   will always return FALSE.
 
 ### Portability
                              X/Open  ncurses  NetBSD
@@ -2115,8 +2136,14 @@ outopts
     leaveok                     Y       Y       Y
     setscrreg                   Y       Y       Y
     wsetscrreg                  Y       Y       Y
+    wgetscrreg                  -       Y       -
     scrollok                    Y       Y       Y
+    is_cleared                  -       Y       -
+    is_idlok                    -       Y       -
+    is_idcok                    -       Y       -
+    is_immedok                  -       Y       -
     is_leaveok                  -       Y       Y
+    is_scrollok                 -       Y       -
     raw_output                  -       -       -
 
 
@@ -2617,11 +2644,9 @@ slk
 
     int slk_wset(int labnum, const wchar_t *label, int justify);
 
-    int PDC_mouse_in_slk(int y, int x);
-    void PDC_slk_free(void);
-    void PDC_slk_initialize(void);
-
-    wchar_t *slk_wlabel(int labnum)
+    wchar_t *slk_wlabel(int labnum);
+    attr_t slk_attr( void);            (ncurses extension)
+    int extended_slk_color( int pair); (ncurses extension)
 
 ### Description
 
@@ -2643,12 +2668,12 @@ slk
    2 lines used
    55      5-5 format (pdcurses format)
 
-   In PDCurses,  one can alternatively set fmt as a series of hex
+   In PDCursesMod,  one can alternatively set fmt as a series of hex
    digits specifying the format.  For example,  0x414 would result
    in 4-1-4 format; 0x21b3 would result in 2-1-11-3 format;  and
    so on.  Also,  negating fmt results in the index line being added.
 
-   Also,  in PDCurses,  one can call slk_init() at any time
+   Also,  in PDCursesMod,  one can call slk_init() at any time
    _after_ initscr(),  to reset the label format.  If you do this,
    you'll need to reset the label text and call slk_refresh().  However,
    you can't toggle the index line or turn SLK on or off after initscr()
@@ -2657,6 +2682,10 @@ slk
 
    slk_refresh(), slk_noutrefresh() and slk_touch() are analogous to
    refresh(), noutrefresh() and touch().
+
+   slk_color() is analogous to color_set(),  and is similarly limited
+   to 16-bit color pairs.  extended_slk_color() allows the ability to
+   access color pairs beyond 64K.
 
 ### Return Value
 
@@ -2678,11 +2707,10 @@ slk
     slk_attr_on                 Y       Y       Y
     slk_attr_set                Y       Y       Y
     slk_attr_off                Y       Y       Y
+    slk_attr                    -       Y       -
     slk_wset                    Y       Y       Y
-    PDC_mouse_in_slk            -       -       -
-    PDC_slk_free                -       -       -
-    PDC_slk_initialize          -       -       -
     slk_wlabel                  -       -       -
+    extended_slk_color          -       Y       -
 
 
 
@@ -2936,19 +2964,19 @@ window
     WINDOW *subwin(WINDOW* orig, int nlines, int ncols,
                    int begy, int begx);
     WINDOW *dupwin(WINDOW *win);
+    WINDOW *wgetparent(const WINDOW *win);
     int delwin(WINDOW *win);
     int mvwin(WINDOW *win, int y, int x);
     int mvderwin(WINDOW *win, int pary, int parx);
     int syncok(WINDOW *win, bool bf);
+    bool is_subwin(const WINDOW *win);
+    bool is_syncok(const WINDOW *win);
     void wsyncup(WINDOW *win);
     void wcursyncup(WINDOW *win);
     void wsyncdown(WINDOW *win);
 
     WINDOW *resize_window(WINDOW *win, int nlines, int ncols);
     int wresize(WINDOW *win, int nlines, int ncols);
-    WINDOW *PDC_makelines(WINDOW *win);
-    WINDOW *PDC_makenew(int nlines, int ncols, int begy, int begx);
-    void PDC_sync(WINDOW *win);
 
 ### Description
 
@@ -2958,9 +2986,8 @@ window
    ncols to COLS - begx. Create a new full-screen window by calling
    newwin(0, 0, 0, 0).
 
-   delwin() deletes the named window, freeing all associated memory. In
-   the case of overlapping windows, subwindows should be deleted before
-   the main window.
+   delwin() deletes the named window, freeing all associated memory.
+   Subwindows must be deleted before the main window can be deleted.
 
    mvwin() moves the window so that the upper left-hand corner is at
    position (y,x). If the move would cause the window to be off the
@@ -2985,10 +3012,18 @@ window
 
    dupwin() creates an exact duplicate of the window win.
 
+   wgetparent() returns the parent WINDOW pointer for subwindows, or NULL
+   for windows having no parent.
+
    wsyncup() causes a touchwin() of all of the window's parents.
 
-   If wsyncok() is called with a second argument of TRUE, this causes a
+   If syncok() is called with a second argument of TRUE, this causes a
    wsyncup() to be called every time the window is changed.
+
+   is_subwin() reports whether the specified window is a subwindow,
+   created by subwin() or derwin().
+
+   is_syncok() reports whether the specified window is in syncok mode.
 
    wcursyncup() causes the current cursor position of all of a window's
    ancestors to reflect the current cursor position of the current
@@ -3004,16 +3039,6 @@ window
    that, unlike ncurses, it will NOT process any subwindows of the
    window. (However, you still can call it _on_ subwindows.) It returns
    OK or ERR.
-
-   PDC_makenew() allocates all data for a new WINDOW * except the actual
-   lines themselves. If it's unable to allocate memory for the window
-   structure, it will free all allocated memory and return a NULL
-   pointer.
-
-   PDC_makelines() allocates the memory for the lines.
-
-   PDC_sync() handles wrefresh() and wsyncup() calls when a window is
-   changed.
 
 ### Return Value
 
@@ -3040,15 +3065,15 @@ window
     derwin                      Y       Y       Y
     mvderwin                    Y       Y       Y
     dupwin                      Y       Y       Y
+    wgetparent                  -       Y       -
     wsyncup                     Y       Y       Y
     syncok                      Y       Y       Y
+    is_subwin                   -       Y       -
+    is_syncok                   -       Y       -
     wcursyncup                  Y       Y       Y
     wsyncdown                   Y       Y       Y
     wresize                     -       Y       Y
     resize_window               -       -       -
-    PDC_makelines               -       -       -
-    PDC_makenew                 -       -       -
-    PDC_sync                    -       -       -
 
 
 

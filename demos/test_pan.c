@@ -2,7 +2,8 @@
 
 http://www.tldp.org/HOWTO/NCURSES-Programming-HOWTO/panels.html
 
-   Should look like this when you run it :
+   Should look like this when you run it (note that your editor
+should be set to UTF-8;  otherwise,  you'll see some garbage) :
 
             -------- Top of screen -----------
  Hit 1-3 to move panels 1-3 to the top
@@ -10,7 +11,7 @@ http://www.tldp.org/HOWTO/NCURSES-Programming-HOWTO/panels.html
  Tab toggles display of top panel
  Click on a panel to bring to top/send to bottom
  Escape or q exits the program
-
+ r causes the panel to be repositioned at random
     ┌──────────────────────────────────────┐
     │    ┌──────────────────────────────────────┐
     │    │    ┌──────────────────────────────────────┐
@@ -29,7 +30,10 @@ http://www.tldp.org/HOWTO/NCURSES-Programming-HOWTO/panels.html
 
 #include <panel.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <assert.h>
+
+#include "../demos/snprintf.c"
 
 #if !defined( __PDCURSES__) && !NCURSES_SP_FUNCS
       /* Older ncurses may lack ceiling_panel() and ground_panel() */
@@ -69,7 +73,7 @@ int main()
 {
    WINDOW *my_wins[3];
    PANEL  *my_panels[3];
-   int lines = 10, cols = 40, y = 7, x = 4, i, c = 0;
+   int lines = 10, cols = 40, y = 8, x = 4, i, c = 0;
 #ifdef __PDCURSESMOD__
    int box_style = 0;
 #endif
@@ -111,13 +115,13 @@ int main()
    mvaddstr( 5, 1, "h, v toggle doubled horiz/vert lines");
 #endif
    mvaddstr( 6, 1, "Escape or q exits the program");
+   mvaddstr( 7, 1, "r causes the panel to be repositioned at random");
 
    /* Update the stacking order. 2nd panel will be on top */
    while( c != 27 && c != 'q')
       {
       PANEL *curr_top = ceiling_panel( NULL);
 
-      assert( curr_top);
       update_panels();
 
       /* Show it on the screen */
@@ -130,14 +134,17 @@ int main()
             top_panel( my_panels[c - '1']);
             break;
          case 9:
+            if( curr_top)
+               {
 #ifdef __PDCURSES__
-            if( panel_hidden( curr_top) == OK)
+               if( panel_hidden( curr_top) == OK)
 #else
-            if( panel_hidden( curr_top) == TRUE)
+               if( panel_hidden( curr_top) == TRUE)
 #endif
-               show_panel( curr_top);
-            else
-               hide_panel( curr_top);
+                  show_panel( curr_top);
+               else
+                  hide_panel( curr_top);
+               }
             break;
 #ifdef __PDCURSESMOD__
          case 'v':
@@ -153,22 +160,27 @@ int main()
             break;
 #endif
          case KEY_LEFT: case KEY_RIGHT: case KEY_UP: case KEY_DOWN:
-            {
-            WINDOW *win = panel_window( curr_top);
+            if( curr_top)
+               {
+               WINDOW *win = panel_window( curr_top);
 
-            x = getbegx( win);
-            y = getbegy( win);
-            if( c == KEY_LEFT)
-               x--;
-            if( c == KEY_RIGHT)
-               x++;
-            if( c == KEY_UP)
-               y--;
-            if( c == KEY_DOWN)
-               y++;
-            if( move_panel( curr_top, y, x) == ERR)
-               flash( );
-            }
+               x = getbegx( win);
+               y = getbegy( win);
+               if( c == KEY_LEFT)
+                  x--;
+               if( c == KEY_RIGHT)
+                  x++;
+               if( c == KEY_UP)
+                  y--;
+               if( c == KEY_DOWN)
+                  y++;
+               if( move_panel( curr_top, y, x) == ERR)
+                  flash( );
+               }
+            break;
+         case 'r':
+            if( curr_top)
+               move_panel( curr_top, rand( ) % (LINES - lines), rand( ) % (COLS - cols));
             break;
          case KEY_MOUSE:
             {
@@ -201,7 +213,7 @@ int main()
       delwin( my_wins[i]);
       }
 #ifdef __PDCURSESMOD__      /* Not really needed,  but ensures Valgrind  */
-    PDC_free_memory_allocations( );      /* says all memory was freed */
+    delscreen( SP);                      /* says all memory was freed */
 #endif
     return( 0);
 }

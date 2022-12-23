@@ -90,10 +90,15 @@ void PDC_set_keyboard_binary(bool on)
 
 /* check if a key or mouse event is waiting */
 
+static int _stored_key;
+static Uint32 _stored_timestamp;
+
 bool PDC_check_key(void)
 {
     bool haveevent;
 
+    if( _stored_key && SDL_GetTicks( ) > _stored_timestamp + 2)
+        return( TRUE);
     PDC_pump_and_peep();
 
     /* SDL_TEXTINPUT can return multiple chars from the IME which we
@@ -175,7 +180,6 @@ static int _handle_alt_keys(int key)
 static int _process_key_event(void)
 {
     int i, key = 0;
-
 #ifdef PDC_WIDE
     size_t bytes;
 #endif
@@ -226,6 +230,8 @@ static int _process_key_event(void)
     }
     else if (event.type == SDL_TEXTINPUT)
     {
+        int rval;
+
 #ifdef PDC_WIDE
         if ((key = _utf8_to_unicode(event.text.text, &bytes)) == -1)
         {
@@ -236,13 +242,20 @@ static int _process_key_event(void)
             memmove(event.text.text, event.text.text + bytes,
                     strlen(event.text.text) - bytes + 1);
         }
-        return _handle_alt_keys(key);
+        rval = _handle_alt_keys(key);
 #else
         key = (unsigned char)event.text.text[0];
         memmove(event.text.text, event.text.text + 1,
                 strlen(event.text.text));
-        return key > 0x7f ? -1 : _handle_alt_keys(key);
+        rval = (key > 0x7f ? -1 : _handle_alt_keys(key));
 #endif
+        if( strchr( "/+*-", rval))  /* may actually be PADSLASH, PADPLUS, */
+        {                           /* etc.  Wait 2 ms to see if a PADx   */
+            _stored_key = rval;     /* keystroke is coming in.            */
+            _stored_timestamp = event.text.timestamp;
+            rval = -1;
+        }
+        return( rval);
     }
 
     oldkey = event.key.keysym.sym;
@@ -276,10 +289,10 @@ static int _process_key_event(void)
             if ((event.key.keysym.mod & KMOD_SHIFT) ||
                 (key_table[i].numkeypad && (event.key.keysym.mod & KMOD_NUM)))
             {
-#ifdef __linux
-                key = -1;
-#else
                 key = key_table[i].shifted;
+#ifdef __linux
+                if( (key >= '0' && key <= '9') || strchr( ".+-*/", key))
+                    key = -1;
 #endif
             }
             else if (event.key.keysym.mod & KMOD_CTRL)
@@ -295,6 +308,7 @@ static int _process_key_event(void)
                 /* To get here, we ignore all other modifiers */
                 key = key_table[i].normal;
             }
+            _stored_key = 0;
 
             return key;
         }
@@ -334,6 +348,8 @@ static int _process_mouse_event(void)
 
     SP->mouse_status.x = (event.motion.x - pdc_xoffset) / pdc_fwidth;
     SP->mouse_status.y = (event.motion.y - pdc_yoffset) / pdc_fheight;
+    if( SP->mouse_status.x >= COLS || SP->mouse_status.y >= LINES)
+        return -1;
 
     if (event.type == SDL_MOUSEMOTION)
     {
@@ -411,6 +427,14 @@ static int _process_mouse_event(void)
 
 int PDC_get_key(void)
 {
+    if( _stored_key && SDL_GetTicks( ) > _stored_timestamp + 2)
+    {                        /*  One of +/-* was hit and not cancelled  */
+        const int key = _stored_key;   /* out within 2 ms by a PADPLUS, */
+                                    /* PADSLASH, PADMINUS,  or PADSTAR. */
+        _stored_key = 0;
+        return( key);
+    }
+
     switch (event.type)
     {
     case SDL_QUIT:

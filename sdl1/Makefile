@@ -1,4 +1,10 @@
-# Makefile for PDCurses for SDL
+# GNU MAKE Makefile for PDCurses for SDL
+#
+# Usage: [g]make [DEBUG=Y] [WIDE=Y] [UTF8=Y] [LIBNAME=(name)]
+#                [DLLNAME=(name)] [target]
+#
+# where target can be any of:
+# [all|demos|libpdcurses.a|testcurs]...
 
 O = o
 
@@ -24,13 +30,14 @@ else
 	CFLAGS  += -O2
 endif
 
-ifeq ($(WIDE),Y)
-	CFLAGS	+= -DPDC_WIDE
-	SLIBS	+= -lSDL_ttf
-endif
-
 ifeq ($(UTF8),Y)
-	CFLAGS	+= -DPDC_FORCE_UTF8
+	CFLAGS	+= -DPDC_FORCE_UTF8 -DPDC_WIDE
+	SLIBS	+= -lSDL_ttf
+else
+	ifeq ($(WIDE),Y)
+		CFLAGS	+= -DPDC_WIDE
+		SLIBS	+= -lSDL_ttf
+	endif
 endif
 
 ifdef CHTYPE_32
@@ -42,9 +49,12 @@ else
 	LDFLAGS		= $(LIBCURSES) $(SLIBS)
 endif
 
+LIBNAME=pdcurses
+DLLNAME=pdcurses
+
 RANLIB		= ranlib
-LIBCURSES	= libpdcurses.a
-LIBCURSES_SO	= libpdcurses.so
+LIBCURSES	= lib$(LIBNAME).a
+LIBCURSES_SO	= lib$(DLLNAME).so
 
 BUILD		= $(CC) $(CFLAGS) -I$(PDCURSES_SRCDIR)
 
@@ -89,6 +99,7 @@ $(LIBOBJS) $(PDCOBJS) : $(PDCURSES_HEADERS)
 $(PDCOBJS) : $(PDCURSES_SDL_H)
 $(DEMOS) : $(PDCURSES_CURSES_H) $(LIBCURSES)
 tui.o tuidemo.o : $(PDCURSES_CURSES_H)
+terminfo.o : $(TERM_HEADER)
 panel.o ptest: $(PANEL_HEADER)
 
 $(LIBOBJS) : %.o: $(srcdir)/%.c

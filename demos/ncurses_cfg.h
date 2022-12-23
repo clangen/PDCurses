@@ -1,13 +1,13 @@
 /* This file is only used with the ncurses test programs.
  *
- * Have ncurses-6.1 unpacked in your $(HOME) (you don't need to build
+ * Have ncurses-6.3 unpacked in your $(HOME) (you don't need to build
  * it), or edit ncurses_testdir appropriately in the Makefile or
- * nctests.mif. Configure and build PDCurses, and:
+ * nctests.mif. Configure and build PDCursesMod, and:
  *
  * "make ncurses_tests" to start.
  * "make ncurses_clean" when you're done.
  *
- * Builds: bs gdc hanoi knight tclock ncurses
+ * Builds: bs gdc hanoi knight tclock ncurses (many others)
  */
 
 #define PDC_NCMOUSE
@@ -40,6 +40,7 @@
 #define HAVE_LIBPANEL 1
 #define HAVE_LOCALE_H 1
 #define HAVE_MATH_H 1
+#define HAVE_MATH_FUNCS 1
 #define HAVE_NAPMS 1
 #define HAVE_NEWPAD 1
 #define HAVE_PANEL_H 1
