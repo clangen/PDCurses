@@ -19,15 +19,9 @@ extern int PDC_key_queue[KEY_QUEUE_SIZE];
 
 bool PDC_check_key(void)
 {
-    static int count;
-
     if( PDC_key_queue_low != PDC_key_queue_high)
         return TRUE;
-    if( count++ == 100)
-    {
-        count = 0;
-        PDC_napms( 1);
-    }
+    PDC_napms( 1);
     return FALSE;
 }
 
